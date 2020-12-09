@@ -342,6 +342,29 @@ struct max1720x_chip {
 	u16 *convgcfg_values;
 	struct mutex convgcfg_lock;
 	unsigned int debug_irq_none_cnt;
+
+	/* fix to capacity estimation */
+	int comp_update_count;
+	int dxacc_update_count;
+	u16 design_capacity;
+	int cycle_band;
+	int cycle_fade;
+	int cycle_stable;
+	int ini_rcomp0;
+	int ini_tempco;
+
+	/* record temp for update condition */
+	u32 batt_update_high_temp_threshold;
+	int batt_temp;
+	bool monitor_batt_temp;
+
+	/*
+	 * Thermal test:
+	 * fake_temp=0 means no fake
+	 * fake_temp>0 means fake the battery temp
+	 */
+	u16 fake_temp;
+	int batt_health;
 };
 
 static inline int max1720x_regmap_read(struct regmap *map,
@@ -1035,7 +1058,10 @@ static int max1720x_get_property(struct power_supply *psy,
 			return val->intval;
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
-		val->intval = max1720x_get_battery_health(chip);
+		if (chip->batt_health != POWER_SUPPLY_HEALTH_UNKNOWN)
+			val->intval = chip->batt_health;
+		else
+			val->intval = max1720x_get_battery_health(chip);
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = max1720x_get_battery_soc(chip);
@@ -1159,6 +1185,9 @@ static int max1720x_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		rc = max1720x_set_battery_soc(chip, val);
 		break;
+	case POWER_SUPPLY_PROP_HEALTH:
+		chip->batt_health = val->intval;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -1171,6 +1200,8 @@ static int max1720x_property_is_writeable(struct power_supply *psy,
 {
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CAPACITY:
+	case POWER_SUPPLY_PROP_BATT_CE_CTRL:
+	case POWER_SUPPLY_PROP_HEALTH:
 		return 1;
 	default:
 		break;
@@ -2030,6 +2061,14 @@ static int max1720x_probe(struct i2c_client *client,
 	if (of_property_read_bool(dev->of_node, "maxim,psy-type-unknown"))
 		max1720x_psy_desc.type = POWER_SUPPLY_TYPE_UNKNOWN;
 
+	ret = read_chip_property_u32(chip, "maxim,update-high-temp-threshold",
+					&data32);
+	if (ret < 0)
+		chip->batt_update_high_temp_threshold =
+					DEFAULT_HIGH_TEMP_UPDATE_THRESHOLD;
+	else
+		chip->batt_update_high_temp_threshold = data32;
+
 	psy_cfg.drv_data = chip;
 	chip->psy = devm_power_supply_register(dev,
 					       &max1720x_psy_desc, &psy_cfg);
@@ -2052,6 +2091,8 @@ static int max1720x_probe(struct i2c_client *client,
 	}
 
 	max1720x_set_serial_number(chip);
+
+	chip->batt_health = POWER_SUPPLY_HEALTH_UNKNOWN;
 
 	INIT_WORK(&chip->cycle_count_work, max1720x_cycle_count_work);
 	INIT_DELAYED_WORK(&chip->init_work, max1720x_init_work);
