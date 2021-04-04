@@ -50,7 +50,7 @@ endif
 
 # From arm Makefile
 VDSO_CAFLAGS += $(call cc32-option,-fno-dwarf2-cfi-asm)
-VDSO_CAFLAGS += -mabi=aapcs-linux -mfloat-abi=soft
+VDSO_CAFLAGS += -mabi=aapcs -mfloat-abi=soft
 ifeq ($(CONFIG_CPU_BIG_ENDIAN), y)
 VDSO_CAFLAGS += -mbig-endian
 else
