@@ -1,0 +1,5 @@
+# Automatically added by dh_installmodules/13.3.4
+if [ -e /boot/System.map-4.9-0-google-sargo ]; then
+	depmod -a -F /boot/System.map-4.9-0-google-sargo 4.9-0-google-sargo || true
+fi
+# End automatically added section
