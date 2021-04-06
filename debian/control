@@ -1,10 +1,11 @@
 Source: linux-android-google-sargo
 Section: kernel
 Priority: optional
-Maintainer: hybris-mobian porters <info@hybris-mobian.org>
-Uploaders: Eugenio Paolantonio (g7) <me@medesimo.eu>,
-           r3vn <giuseppe.corti@pm.me>,
-           Erfan Abdi <erfangplus@gmail.com>,
+Maintainer: Droidian porters <info@droidian.org>
+Uploaders: Eugenio Paolantonio (g7) <eugenio@droidian.org>,
+           r3vn <giuseppe@droidian.org>,
+           Erfan Abdi <erfan@droidian.org>,
+           Erik Inkinen <erik@droidian.org>,
 Build-Depends: build-essential,
                dpkg-dev,
                findutils,
@@ -22,10 +23,11 @@ Build-Depends: build-essential,
                android-sdk-ufdt-tests,
                mkbootimg,
                mkdtboimg,
+               avbtool,
                linux-initramfs-halium-generic:arm64, binutils-aarch64-linux-gnu, clang-android-6.0-4691093, gcc-4.9-aarch64-linux-android, g++-4.9-aarch64-linux-android, libgcc-4.9-dev-aarch64-linux-android-cross, device-tree-compiler, lz4
 Standards-Version: 4.5.0.3
-Vcs-Browser: https://github.com/hybris-mobian/linux-android-google-sargo
-Vcs-Git: https://github.com/hybris-mobian/linux-android-google-sargo.git
+Vcs-Browser: https://github.com/droidian/linux-android-google-sargo
+Vcs-Git: https://github.com/droidian/linux-android-google-sargo.git
 
 Package: linux-image-4.9-0-google-sargo
 Architecture: arm64

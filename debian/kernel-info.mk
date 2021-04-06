@@ -64,6 +64,20 @@ KERNEL_BOOTIMAGE_SECONDIMAGE_OFFSET = 0x00f00000
 KERNEL_BOOTIMAGE_TAGS_OFFSET = 0x00000100
 
 ########################################################################
+# Android verified boot
+########################################################################
+
+# Whether to build a flashable vbmeta.img. Please note that currently
+# only empty vbmeta images (disabling verified boot) can be generated.
+# Use 0 (no) or 1 (default).
+DEVICE_VBMETA_REQUIRED = 1
+
+# Samsung devices require a special flag. Enable the following if your
+# device is a Samsung device that requires flag 0 to be present
+# Use 0 (no, default) or 1.
+DEVICE_VBMETA_IS_SAMSUNG = 0
+
+########################################################################
 # Automatic flashing on package upgrades
 ########################################################################
 
