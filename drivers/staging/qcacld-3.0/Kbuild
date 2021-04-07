@@ -37,7 +37,10 @@ endif
 # Make WLAN as open-source driver by default
 WLAN_OPEN_SOURCE := 1
 
-ifeq ($(KERNEL_BUILD), 0)
+	# Disable BUILD_TAG
+	WLAN_DISABLE_BUILD_TAG := y
+	CONFIG_BUILD_TAG := n
+
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
 
@@ -184,6 +187,15 @@ ifneq ($(CONFIG_ROME_IF),sdio)
 	#Flag to enable DISA
 	CONFIG_WLAN_FEATURE_DISA := y
 
+	#Flag to enable OWE
+	CONFIG_WLAN_FEATURE_OWE := y
+
+	#Flag to enable GMAC
+	CONFIG_WLAN_FEATURE_GMAC := y
+
+	#Flag to enable SAE
+	CONFIG_WLAN_FEATURE_SAE := y
+
 	#Flag to enable Fast Path feature
 	CONFIG_WLAN_FASTPATH := y
 
@@ -217,9 +229,6 @@ endif
 
 	# Flag to enable MCC to SCC switch feature
 	CONFIG_MCC_TO_SCC_SWITCH := y
-
-endif
-
 
 # As per target team, build is done as follows:
 # Defconfig : build with default flags
@@ -1399,6 +1408,18 @@ endif
 
 ifeq ($(CONFIG_WLAN_POWER_DEBUGFS), y)
 CDEFINES += -DWLAN_POWER_DEBUGFS
+endif
+
+ifeq ($(CONFIG_WLAN_FEATURE_OWE),y)
+CDEFINES += -DWLAN_FEATURE_OWE
+endif
+
+ifeq ($(CONFIG_WLAN_FEATURE_GMAC),y)
+CDEFINES += -DWLAN_FEATURE_GMAC
+endif
+
+ifeq ($(CONFIG_WLAN_FEATURE_SAE),y)
+CDEFINES += -DWLAN_FEATURE_SAE
 endif
 
 ifeq ($(BUILD_DIAG_VERSION),1)

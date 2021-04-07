@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -529,6 +529,9 @@ pe_create_session(tpAniSirGlobal pMac, uint8_t *bssid, uint8_t *sessionId,
 			&session_ptr->protection_fields_reset_timer,
 			QDF_TIMER_TYPE_SW, pe_reset_protection_callback,
 			(void *)&pMac->lim.gpSession[i]);
+		qdf_wake_lock_create(&session_ptr->ap_ecsa_wakelock,
+				     "ap_ecsa_wakelock");
+		qdf_runtime_lock_init(&session_ptr->ap_ecsa_runtime_lock);
 		if (status == QDF_STATUS_SUCCESS) {
 			status = qdf_mc_timer_start(
 				&session_ptr->protection_fields_reset_timer,
@@ -707,6 +710,8 @@ void pe_delete_session(tpAniSirGlobal mac_ctx, tpPESession session)
 		qdf_mc_timer_stop(&session->protection_fields_reset_timer);
 		qdf_mc_timer_destroy(&session->protection_fields_reset_timer);
 		lim_del_pmf_sa_query_timer(mac_ctx, session);
+		qdf_runtime_lock_deinit(&session->ap_ecsa_runtime_lock);
+		qdf_wake_lock_destroy(&session->ap_ecsa_wakelock);
 	}
 
 	/* Delete FT related information */
@@ -838,6 +843,9 @@ void pe_delete_session(tpAniSirGlobal mac_ctx, tpPESession session)
 #endif
 	pe_delete_fils_info(session);
 	session->valid = false;
+
+	qdf_mem_zero(session->WEPKeyMaterial,
+		     sizeof(session->WEPKeyMaterial));
 
 	if (session->access_policy_vendor_ie)
 		qdf_mem_free(session->access_policy_vendor_ie);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -578,6 +578,29 @@ wma_ol_txrx_vdev_detach(tp_wma_handle wma_handle,
 	iface->is_vdev_valid = false;
 }
 
+/*
+ * wma_handle_monitor_mode_vdev_detach() - Stop and down monitor mode vdev
+ * @wma_handle: wma handle
+ * @vdev_id: used to get wma interface txrx node
+ *
+ * Monitor mode is unconneted mode, so do explicit vdev stop and down
+ *
+ * Return: None
+ */
+static void wma_handle_monitor_mode_vdev_detach(tp_wma_handle wma,
+						uint8_t vdev_id)
+{
+	if (wma_send_vdev_stop_to_fw(wma, vdev_id)) {
+		WMA_LOGE("%s: %d Failed to send vdev stop", __func__, __LINE__);
+		wma_remove_vdev_req(wma, vdev_id,
+				    WMA_TARGET_REQ_TYPE_VDEV_STOP);
+	}
+
+	if (wma_send_vdev_down_to_fw(wma, vdev_id) != QDF_STATUS_SUCCESS)
+		WMA_LOGE("Failed to send vdev down cmd: vdev %d", vdev_id);
+}
+
+
 static QDF_STATUS wma_handle_vdev_detach(tp_wma_handle wma_handle,
 			struct del_sta_self_params *del_sta_self_req_param,
 			uint8_t generate_rsp)
@@ -586,6 +609,9 @@ static QDF_STATUS wma_handle_vdev_detach(tp_wma_handle wma_handle,
 	uint8_t vdev_id = del_sta_self_req_param->session_id;
 	struct wma_txrx_node *iface = &wma_handle->interfaces[vdev_id];
 	struct wma_target_req *msg = NULL;
+
+	if (cds_get_conparam() == QDF_GLOBAL_MONITOR_MODE)
+		wma_handle_monitor_mode_vdev_detach(wma_handle, vdev_id);
 
 	status = wmi_unified_vdev_delete_send(wma_handle->wmi_handle, vdev_id);
 	if (QDF_IS_STATUS_ERROR(status)) {
@@ -693,9 +719,10 @@ QDF_STATUS wma_vdev_detach(tp_wma_handle wma_handle,
 	if (iface->type == WMI_VDEV_TYPE_STA)
 		wma_pno_stop(wma_handle, vdev_id);
 
-	/* P2P Device */
-	if ((iface->type == WMI_VDEV_TYPE_AP) &&
-	    (iface->sub_type == WMI_UNIFIED_VDEV_SUBTYPE_P2P_DEVICE)) {
+	if (((iface->type == WMI_VDEV_TYPE_AP) &&
+	    (iface->sub_type == WMI_UNIFIED_VDEV_SUBTYPE_P2P_DEVICE)) ||
+	    (iface->type == WMI_VDEV_TYPE_OCB) ||
+	    (iface->type == WMI_VDEV_TYPE_MONITOR)) {
 		status = wma_self_peer_remove(wma_handle,
 					pdel_sta_self_req_param, generateRsp);
 		if ((status != QDF_STATUS_SUCCESS) && generateRsp) {
@@ -1512,83 +1539,6 @@ err:
 	return QDF_STATUS_E_FAILURE;
 }
 
-#ifdef QCA_IBSS_SUPPORT
-
-/**
- * wma_delete_all_ibss_peers() - delete all ibss peer for vdev_id
- * @wma: wma handle
- * @vdev_id: vdev id
- *
- * This function send peer delete command to fw for all
- * peers in peer_list  and remove ref count for peer id
- * peer will actually remove from list after receving
- * unmap event from firmware.
- *
- * Return: none
- */
-static void wma_delete_all_ibss_peers(tp_wma_handle wma, A_UINT32 vdev_id)
-{
-	ol_txrx_vdev_handle vdev;
-
-	if (!wma || vdev_id >= wma->max_bssid)
-		return;
-
-	vdev = wma->interfaces[vdev_id].handle;
-	if (!vdev)
-		return;
-
-	/* remove all remote peers of IBSS */
-	ol_txrx_remove_peers_for_vdev(vdev,
-			(ol_txrx_vdev_peer_remove_cb)wma_remove_peer, wma,
-			true);
-}
-#else
-/**
- * wma_delete_all_ibss_peers(): dummy function for when ibss is not supported
- * @wma: wma handle
- * @vdev_id: vdev id
- *
- * This function send peer delete command to fw for all
- * peers in peer_list  and remove ref count for peer id
- * peer will actually remove from list after receving
- * unmap event from firmware.
- *
- * Return: none
- */
-static void wma_delete_all_ibss_peers(tp_wma_handle wma, A_UINT32 vdev_id)
-{
-}
-#endif /* QCA_IBSS_SUPPORT */
-
-/**
- * wma_delete_all_ap_remote_peers() - delete all ap peer for vdev_id
- * @wma: wma handle
- * @vdev_id: vdev id
- *
- * This function send peer delete command to fw for all
- * peers in peer_list  and remove ref count for peer id
- * peer will actually remove from list after receving
- * unmap event from firmware.
- *
- * Return: none
- */
-static void wma_delete_all_ap_remote_peers(tp_wma_handle wma, A_UINT32 vdev_id)
-{
-	ol_txrx_vdev_handle vdev;
-
-	if (!wma || vdev_id >= wma->max_bssid)
-		return;
-
-	vdev = wma->interfaces[vdev_id].handle;
-	if (!vdev)
-		return;
-
-	WMA_LOGD("%s: vdev_id - %d", __func__, vdev_id);
-	/* remove all remote peers of SAP */
-	ol_txrx_remove_peers_for_vdev(vdev,
-		(ol_txrx_vdev_peer_remove_cb)wma_remove_peer, wma, false);
-}
-
 /**
  * wma_hidden_ssid_vdev_restart_on_vdev_stop() - restart vdev to set hidden ssid
  * @wma_handle: wma handle
@@ -1657,6 +1607,60 @@ static void wma_cleanup_target_req_param(struct wma_target_req *tgt_req)
 		qdf_mem_free(tgt_req->user_data);
 		tgt_req->user_data = NULL;
 	}
+}
+
+/**
+ * wma_remove_bss_peer() - remove BSS peer
+ * @wma: pointer to WMA handle
+ * @pdev: pointer to PDEV
+ * @vdev_id: vdev id on which delete BSS request was received
+ * @params: pointer to Delete BSS params
+ *
+ * This function is called on receiving vdev stop response from FW or
+ * vdev stop response timeout. In case of IBSS/NDI, use vdev's self MAC
+ * for removing the peer. In case of STA/SAP use bssid passed as part of
+ * delete STA parameter.
+ *
+ * Return: 0 on success, ERROR code on failure
+ */
+static int wma_remove_bss_peer(tp_wma_handle wma, void *pdev,
+			       struct wma_target_req *req_msg, uint32_t vdev_id,
+			       tpDeleteBssParams params)
+{
+	ol_txrx_vdev_handle vdev;
+	ol_txrx_peer_handle peer = NULL;
+	uint8_t peer_id;
+	uint8_t *mac_addr = NULL;
+
+	vdev = ol_txrx_get_vdev_from_vdev_id(vdev_id);
+	if (!vdev) {
+		WMA_LOGE(FL("vdev is NULL for vdev_id = %d"), vdev_id);
+		wma_cleanup_target_req_param(req_msg);
+		return -EINVAL;
+	 }
+
+	if (wma_is_vdev_in_ibss_mode(wma, vdev_id) ||
+	    WMA_IS_VDEV_IN_NDI_MODE(wma->interfaces, vdev_id)) {
+		mac_addr = ol_txrx_get_vdev_mac_addr(vdev);
+		if (!mac_addr) {
+			WMA_LOGE(FL("mac_addr is NULL for vdev_id = %d"),
+				 vdev_id);
+			wma_cleanup_target_req_param(req_msg);
+			return -EINVAL;
+		}
+	} else {
+		mac_addr = params->bssid;
+	}
+
+	peer = ol_txrx_find_peer_by_addr(pdev, mac_addr, &peer_id);
+	if (!peer) {
+		WMA_LOGE(FL("peer NULL for vdev_id = %d"), vdev_id);
+		wma_cleanup_target_req_param(req_msg);
+		return -EINVAL;
+	}
+	wma_remove_peer(wma, mac_addr, vdev_id, peer, false);
+
+	return 0;
 }
 
 /**
@@ -1881,6 +1885,17 @@ wma_remove_peer_by_reference(ol_txrx_pdev_handle pdev,
 	return status;
 }
 
+#ifdef WLAN_FEATURE_11W
+static void wma_clear_iface_key(struct wma_txrx_node *iface)
+{
+	qdf_mem_zero(&iface->key, sizeof(iface->key));
+}
+#else
+static void wma_clear_iface_key(struct wma_txrx_node *iface)
+{
+}
+#endif
+
 /**
  * wma_vdev_stop_resp_handler() - vdev stop response handler
  * @handle: wma handle
@@ -1897,8 +1912,8 @@ int wma_vdev_stop_resp_handler(void *handle, uint8_t *cmd_param_info,
 	wmi_vdev_stopped_event_fixed_param *resp_event;
 	struct wma_target_req *req_msg, *new_req_msg;
 	ol_txrx_pdev_handle pdev;
-	uint8_t peer_id;
 	struct wma_txrx_node *iface;
+	uint8_t peer_id;
 	int32_t status = 0;
 	QDF_STATUS result;
 
@@ -1917,11 +1932,27 @@ int wma_vdev_stop_resp_handler(void *handle, uint8_t *cmd_param_info,
 		return -EINVAL;
 	}
 
+	/* Ignore stop_response in Monitor mode */
+	if (cds_get_conparam() == QDF_GLOBAL_MONITOR_MODE)
+		return  QDF_STATUS_SUCCESS;
+
 	iface = &wma->interfaces[resp_event->vdev_id];
 
 	/* vdev in stopped state, no more waiting for key */
 	iface->is_waiting_for_key = false;
 
+	/*
+	 * Reset the rmfEnabled as there might be MGMT action frames
+	 * sent on this vdev before the next session is established.
+	 */
+	if (iface->rmfEnabled) {
+		iface->rmfEnabled = 0;
+		WMA_LOGD(FL("Reset rmfEnabled for vdev %d"),
+			 resp_event->vdev_id);
+	}
+
+	/* Clear key information */
+	wma_clear_iface_key(iface);
 	wma_release_wakelock(&iface->vdev_stop_wakelock);
 
 	req_msg = wma_find_vdev_req(wma, resp_event->vdev_id,
@@ -1989,28 +2020,11 @@ int wma_vdev_stop_resp_handler(void *handle, uint8_t *cmd_param_info,
 		qdf_mem_zero(&iface->arp_offload_req,
 			sizeof(iface->arp_offload_req));
 
-		if (wma_is_vdev_in_ibss_mode(wma, resp_event->vdev_id))
-			wma_delete_all_ibss_peers(wma, resp_event->vdev_id);
-		else if (WMA_IS_VDEV_IN_NDI_MODE(wma->interfaces,
-			resp_event->vdev_id)) {
-			wma_delete_all_nan_remote_peers(wma,
-				resp_event->vdev_id);
-		} else {
-			if (wma_is_vdev_in_ap_mode(wma, resp_event->vdev_id)) {
-				wma_delete_all_ap_remote_peers(wma,
-						resp_event->vdev_id);
-			}
-			result = wma_remove_peer_by_reference(pdev,
-							      wma, params,
-							      &peer_id,
-							      params->bssid,
-							      resp_event->vdev_id,
-							      WMA_DELETE_PEER_RSP);
+		status = wma_remove_bss_peer(wma, pdev, req_msg,
+					     resp_event->vdev_id, params);
+		if (status != 0)
+			goto free_req_msg;
 
-			if (result == QDF_STATUS_SUCCESS)
-				goto free_req_msg;
-
-		}
 		wma_send_del_bss_response(wma, req_msg, resp_event->vdev_id);
 
 	} else if (req_msg->msg_type == WMA_SET_LINK_STATE) {
@@ -2037,6 +2051,7 @@ int wma_vdev_stop_resp_handler(void *handle, uint8_t *cmd_param_info,
 
 		wma_send_msg(wma, WMA_SET_LINK_STATE_RSP, (void *)params, 0);
 	}
+
 free_req_msg:
 	qdf_mc_timer_destroy(&req_msg->event_timeout);
 	qdf_mem_free(req_msg);
@@ -3232,9 +3247,10 @@ void wma_vdev_resp_timer(void *data)
 	struct wma_target_req *tgt_req = (struct wma_target_req *)data;
 	ol_txrx_peer_handle peer;
 	ol_txrx_pdev_handle pdev;
-	uint8_t peer_id;
 	struct wma_target_req *msg;
 	struct wma_txrx_node *iface;
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	uint8_t peer_id;
 #ifdef FEATURE_AP_MCC_CH_AVOIDANCE
 	tpAniSirGlobal mac_ctx;
 #endif /* FEATURE_AP_MCC_CH_AVOIDANCE */
@@ -3335,19 +3351,11 @@ void wma_vdev_resp_timer(void *data)
 			return;
 		}
 
-		if (wma_is_vdev_in_ibss_mode(wma, tgt_req->vdev_id))
-			wma_delete_all_ibss_peers(wma, tgt_req->vdev_id);
-		else {
-			if (wma_is_vdev_in_ap_mode(wma, tgt_req->vdev_id)) {
-				wma_delete_all_ap_remote_peers(wma,
-							       tgt_req->
-							       vdev_id);
-			}
-			peer = ol_txrx_find_peer_by_addr(pdev, params->bssid,
-							 &peer_id);
-			wma_remove_peer(wma, params->bssid, tgt_req->vdev_id,
-					peer, false);
-		}
+
+		status = wma_remove_bss_peer(wma, pdev, tgt_req,
+					     tgt_req->vdev_id, params);
+		if (QDF_IS_STATUS_ERROR(status))
+			goto free_tgt_req;
 
 		if (wma_send_vdev_down_to_fw(wma, tgt_req->vdev_id) !=
 		    QDF_STATUS_SUCCESS) {

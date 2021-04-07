@@ -798,10 +798,9 @@ typedef struct hdd_roc_req {
  * @adapter: Adapter address
  * @scan_request: scan request holder
  * @scan_id: scan identifier used across host layers which is generated at WMI
+ * @cookie: scan request identifier sent to userspace
  * @source: scan request originator (NL/Vendor scan)
  * @timestamp: scan request timestamp
- * @inactivity_timer: scan inactivity timer
- * @scan_req_flags: scan request flags
  *
  * Scan request linked list element
  */
@@ -1047,6 +1046,7 @@ typedef struct {
 	uint64_t rx_bytes;
 	qdf_time_t last_tx_rx_ts;
 	qdf_time_t assoc_ts;
+	qdf_time_t disassoc_ts;
 	uint32_t tx_rate;
 	uint32_t rx_rate;
 	bool ampdu;
@@ -1545,7 +1545,7 @@ struct hdd_adapter_s {
 	bool offloads_configured;
 
 	/* DSCP to UP QoS Mapping */
-	sme_QosWmmUpType hddWmmDscpToUpMap[WLAN_HDD_MAX_DSCP + 1];
+	sme_QosWmmUpType hddWmmDscpToUpMap[WLAN_MAX_DSCP + 1];
 
 #ifdef WLAN_FEATURE_LINK_LAYER_STATS
 	bool isLinkLayerStatsSet;
@@ -3063,15 +3063,6 @@ hdd_station_info_t *hdd_get_stainfo(hdd_station_info_t *aStaInfo,
 
 int hdd_driver_memdump_init(void);
 void hdd_driver_memdump_deinit(void);
-
-/**
- * hdd_is_cli_iface_up() - check if there is any cli iface up
- * @hdd_ctx: HDD context
- *
- * Return: return true if there is any cli iface(STA/P2P_CLI) is up
- *         else return false
- */
-bool hdd_is_cli_iface_up(hdd_context_t *hdd_ctx);
 
 /**
  * hdd_get_nud_stats_cb() - callback api to update the stats received from FW

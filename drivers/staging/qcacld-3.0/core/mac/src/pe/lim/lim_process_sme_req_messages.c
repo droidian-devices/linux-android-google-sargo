@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1224,12 +1224,8 @@ static QDF_STATUS lim_send_hal_start_scan_offload_req(tpAniSirGlobal pMac,
 	    pe_debug("No IEs in the scan request from supplicant");
 	}
 
-	/**
-	 * The tSirScanOffloadReq will reserve the space for first channel,
-	 * so allocate the memory for (numChannels - 1) and uIEFieldLen
-	 */
 	len = sizeof(tSirScanOffloadReq) +
-		(pScanReq->channelList.numChannels - 1) +
+		pScanReq->channelList.numChannels +
 		pScanReq->uIEFieldLen + pScanReq->oui_field_len;
 
 	pScanOffloadReq = qdf_mem_malloc(len);
@@ -1337,7 +1333,7 @@ static QDF_STATUS lim_send_hal_start_scan_offload_req(tpAniSirGlobal pMac,
 			     pScanReq->probe_req_ie_bitmap,
 			     PROBE_REQ_BITMAP_LEN * sizeof(uint32_t));
 	pScanOffloadReq->oui_field_offset = sizeof(tSirScanOffloadReq) +
-				(pScanOffloadReq->channelList.numChannels - 1) +
+				pScanOffloadReq->channelList.numChannels +
 				pScanOffloadReq->uIEFieldLen;
 	if (pScanOffloadReq->num_vendor_oui != 0) {
 		qdf_mem_copy(
@@ -1489,6 +1485,30 @@ static void __lim_process_clear_dfs_channel_list(tpAniSirGlobal pMac, tpSirMsgQ 
 {
 	qdf_mem_set(&pMac->lim.dfschannelList, sizeof(tSirDFSChannelList), 0);
 }
+
+#ifdef WLAN_FEATURE_SAE
+/**
+ * lim_update_sae_config()- This API update SAE session info to csr config
+ * from join request.
+ * @session: PE session
+ * @sme_join_req: pointer to join request
+ *
+ * Return: None
+ */
+static void lim_update_sae_config(tpPESession session,
+		tpSirSmeJoinReq sme_join_req)
+{
+	session->sae_pmk_cached = sme_join_req->sae_pmk_cached;
+
+	pe_debug("pmk_cached %d for BSSID=" MAC_ADDRESS_STR,
+		session->sae_pmk_cached,
+		MAC_ADDR_ARRAY(sme_join_req->bssDescription.bssId));
+}
+#else
+static inline void lim_update_sae_config(tpPESession session,
+		tpSirSmeJoinReq sme_join_req)
+{}
+#endif
 
 /**
  * __lim_process_sme_join_req() - process SME_JOIN_REQ message
@@ -1772,7 +1792,13 @@ __lim_process_sme_join_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 
 		/* Record if management frames need to be protected */
 #ifdef WLAN_FEATURE_11W
-		if (eSIR_ED_AES_128_CMAC == sme_join_req->MgmtEncryptionType)
+		if ((eSIR_ED_AES_128_CMAC ==
+					    sme_join_req->MgmtEncryptionType)
+#ifdef WLAN_FEATURE_GMAC
+		   || (eSIR_ED_AES_GMAC_128 == sme_join_req->MgmtEncryptionType)
+		   || (eSIR_ED_AES_GMAC_256 == sme_join_req->MgmtEncryptionType)
+#endif
+		   )
 			session->limRmfEnabled = 1;
 		else
 			session->limRmfEnabled = 0;
@@ -1805,6 +1831,7 @@ __lim_process_sme_join_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 			sme_join_req->txLdpcIniFeatureEnabled;
 
 		lim_update_fils_config(session, sme_join_req);
+		lim_update_sae_config(session, sme_join_req);
 		if (session->bssType == eSIR_INFRASTRUCTURE_MODE) {
 			session->limSystemRole = eLIM_STA_ROLE;
 		} else {
@@ -2931,6 +2958,9 @@ __lim_process_sme_set_context_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 	}
 	qdf_mem_copy(set_context_req, msg_buf,
 			sizeof(struct sSirSmeSetContextReq));
+
+	qdf_mem_zero(msg_buf, sizeof(tSirSmeSetContextReq));
+
 	sme_session_id = set_context_req->sessionId;
 	sme_transaction_id = set_context_req->transactionId;
 
@@ -3038,6 +3068,7 @@ __lim_process_sme_set_context_req(tpAniSirGlobal mac_ctx, uint32_t *msg_buf)
 				sme_transaction_id);
 	}
 end:
+	qdf_mem_zero(set_context_req, sizeof(tSirSmeSetContextReq));
 	qdf_mem_free(set_context_req);
 	return;
 }
@@ -4109,6 +4140,7 @@ static void __lim_process_roam_scan_offload_req(tpAniSirGlobal mac_ctx,
 	local_ie_buf = qdf_mem_malloc(MAX_DEFAULT_SCAN_IE_LEN);
 	if (!local_ie_buf) {
 		pe_err("Mem Alloc failed for local_ie_buf");
+		qdf_mem_zero(req_buffer, sizeof(tSirRoamOffloadScanReq));
 		qdf_mem_free(req_buffer);
 		return;
 	}
@@ -4136,6 +4168,7 @@ static void __lim_process_roam_scan_offload_req(tpAniSirGlobal mac_ctx,
 	status = wma_post_ctrl_msg(mac_ctx, &wma_msg);
 	if (eSIR_SUCCESS != status) {
 		pe_err("Posting WMA_ROAM_SCAN_OFFLOAD_REQ failed");
+		qdf_mem_zero(req_buffer, sizeof(tSirRoamOffloadScanReq));
 		qdf_mem_free(req_buffer);
 	}
 }
@@ -5976,6 +6009,8 @@ void lim_send_chan_switch_action_frame(tpAniSirGlobal mac_ctx,
 
 }
 
+#define MAX_WAKELOCK_FOR_CSA         5000
+
 /**
  * lim_process_sme_dfs_csa_ie_request() - process sme dfs csa ie req
  *
@@ -6100,7 +6135,9 @@ skip_vht:
 		pe_err("Unable to set CSA IE in beacon");
 		return;
 	}
-
+	qdf_wake_lock_timeout_acquire(&session_entry->ap_ecsa_wakelock,
+				      MAX_WAKELOCK_FOR_CSA);
+	qdf_runtime_pm_prevent_suspend(&session_entry->ap_ecsa_runtime_lock);
 	/*
 	 * First beacon update request is sent here, the remaining updates are
 	 * done when the FW responds back after sending the first beacon after
