@@ -103,7 +103,8 @@ typedef struct sPESession       /* Added to Support BT-AMP */
 	uint16_t peSessionId;
 	uint8_t smeSessionId;
 	uint16_t transactionId;
-
+	qdf_wake_lock_t ap_ecsa_wakelock;
+	qdf_runtime_lock_t ap_ecsa_runtime_lock;
 	/* In AP role: BSSID and selfMacAddr will be the same. */
 	/* In STA role: they will be different */
 	tSirMacAddr bssId;
@@ -508,11 +509,13 @@ typedef struct sPESession       /* Added to Support BT-AMP */
 	bool ch_switch_in_progress;
 	/* previous auth frame's sequence number */
 	uint16_t prev_auth_seq_num;
+	tSirMacAddr prev_auth_mac_addr;
 	bool fw_roaming_started;
 	bool recvd_deauth_while_roaming;
 	bool recvd_disassoc_while_roaming;
 	bool deauth_disassoc_rc;
 	int8_t def_max_tx_pwr;
+	bool sae_pmk_cached;
 } tPESession, *tpPESession;
 
 /*-------------------------------------------------------------------------

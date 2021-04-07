@@ -1345,7 +1345,7 @@ IE TPCReport (EID_TPC_REPORT)             // 7.3.2.18
 
 IE SuppChannels (EID_SUPPORTED_CHANNELS)  // 7.2.3.19
 {
-    bands[2][1..48];
+    bands[2][0..48];
 }
 
 IE SuppOperatingClasses (EID_SUPPORTED_OPER_CLASSES)
@@ -2622,6 +2622,12 @@ IE fragment_ie (EID_FRAGMENT_IE)
     data[0..255];
 }
 
+IE dh_parameter_element (EID_EXTN_ID_ELEMENT) OUI ( 0x20 )
+{
+    group[2];
+    public_key[0..255];
+}
+
 const EID_RRM_BEACON_REPORTING     = 1;
 const EID_RRM_BCN_REPORTING_DETAIL = 2;
 
@@ -3371,6 +3377,7 @@ FRAME AssocRequest                        // 7.2.3.4
     OPTIE  fils_key_confirmation;
     OPTIE  fils_hlp_container;
     OPTIE  fragment_ie;
+    OPTIE  dh_parameter_element;
     OPTIE  WPAOpaque;
     OPTIE  WMMCaps;
     OPTIE  WMMInfoStation;
@@ -3381,7 +3388,6 @@ FRAME AssocRequest                        // 7.2.3.4
     OPTIE  WFDIEOpaque;
     OPTIE  vendor_vht_ie;
     OPTIE  hs20vendor_ie;
-    OPTIE  MBO_IE;
     OPTIE  QCN_IE;
     OPTIE  osen_ie;
 } // End frame AssocRequest.

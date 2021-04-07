@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -67,10 +67,6 @@
 /*----------------------------------------------------------------------------
  *  External declarations for global context
  * -------------------------------------------------------------------------*/
-#ifdef FEATURE_WLAN_CH_AVOID
-extern sapSafeChannelType safe_channels[];
-#endif /* FEATURE_WLAN_CH_AVOID */
-
 /*----------------------------------------------------------------------------
  * Static Variable Definitions
  * -------------------------------------------------------------------------*/
@@ -2242,32 +2238,35 @@ sap_dfs_is_channel_in_nol_list(ptSapContext sap_context,
 
 uint8_t sap_select_default_oper_chan(struct sap_acs_cfg *acs_cfg)
 {
-	uint8_t channel;
+	uint16_t i;
 
-	if (NULL == acs_cfg) {
-		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
-			  "ACS config invalid!");
-		QDF_BUG(0);
+	if (!acs_cfg || !acs_cfg->ch_list || !acs_cfg->ch_list_count)
 		return 0;
+
+	/*
+	 * There could be both 2.4Ghz and 5ghz channels present in the list
+	 * based upon the Hw mode received from hostapd, it is always better
+	 * to chose a default 5ghz operating channel than 2.4ghz, as it can
+	 * provide a better throughput, latency than 2.4ghz. Also 40 Mhz is
+	 * rare in 2.4ghz band, so 5ghz should be preferred. If we get a 5Ghz
+	 * chan in the acs cfg ch list , we should go for that first else the
+	 * default channel can be 2.4ghz.
+	 */
+
+	for (i = 0; i < acs_cfg->ch_list_count; i++) {
+		if (CDS_IS_CHANNEL_5GHZ(acs_cfg->ch_list[i])) {
+			QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
+				  FL("default 5ghz channel chosen as %d"),
+				  acs_cfg->ch_list[i]);
+			return acs_cfg->ch_list[i];
+		}
 	}
 
-	if (acs_cfg->hw_mode == eCSR_DOT11_MODE_11a) {
-		channel = SAP_DEFAULT_5GHZ_CHANNEL;
-	} else if ((acs_cfg->hw_mode == eCSR_DOT11_MODE_11n) ||
-		   (acs_cfg->hw_mode == eCSR_DOT11_MODE_11n_ONLY) ||
-		   (acs_cfg->hw_mode == eCSR_DOT11_MODE_11ac) ||
-		   (acs_cfg->hw_mode == eCSR_DOT11_MODE_11ac_ONLY)) {
-		if (CDS_IS_CHANNEL_5GHZ(acs_cfg->start_ch))
-			channel = SAP_DEFAULT_5GHZ_CHANNEL;
-		else
-			channel = SAP_DEFAULT_24GHZ_CHANNEL;
-	} else {
-		channel = SAP_DEFAULT_24GHZ_CHANNEL;
-	}
+	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
+		  FL("default channel chosen as %d"),
+		  acs_cfg->ch_list[0]);
 
-	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_INFO,
-			FL("channel selected to start bss %d"), channel);
-	return channel;
+	return acs_cfg->ch_list[0];
 }
 
 /**
@@ -2364,6 +2363,9 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
 					"%s: Override ch %d to %d due to CC Intf",
 					__func__, sap_context->channel, con_ch);
 				sap_context->channel = con_ch;
+				if (CDS_IS_CHANNEL_24GHZ(con_ch))
+					sap_context->ch_params.ch_width =
+								CH_WIDTH_20MHZ;
 				cds_set_channel_params(sap_context->channel, 0,
 						&sap_context->ch_params);
 			}
@@ -2425,6 +2427,9 @@ QDF_STATUS sap_goto_channel_sel(ptSapContext sap_context,
 						__func__, sap_context->channel,
 						con_ch);
 				sap_context->channel = con_ch;
+				if (CDS_IS_CHANNEL_24GHZ(con_ch))
+					sap_context->ch_params.ch_width =
+								CH_WIDTH_20MHZ;
 				cds_set_channel_params(sap_context->channel, 0,
 						&sap_context->ch_params);
 			}
@@ -4872,9 +4877,7 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 	uint8_t end_ch_num, band_end_ch;
 	uint32_t en_lte_coex;
 	tHalHandle hal = CDS_GET_HAL_CB(sap_ctx->p_cds_gctx);
-#ifdef FEATURE_WLAN_CH_AVOID
 	uint8_t i;
-#endif
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
 	tSapChSelSpectInfo spect_info_obj = { NULL, 0 };
 	uint16_t ch_width;
@@ -4983,13 +4986,6 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 				continue;
 		}
 
-#ifdef FEATURE_WLAN_CH_AVOID
-		for (i = 0; i < NUM_CHANNELS; i++) {
-			if (safe_channels[i].channelNumber ==
-			     CDS_CHANNEL_NUM(loop_count)) {
-				/* Check if channel is safe */
-				if (true == safe_channels[i].isSafe) {
-#endif
 #ifdef FEATURE_WLAN_AP_AP_ACS_OPTIMIZE
 		uint8_t ch;
 
@@ -5025,12 +5021,6 @@ static QDF_STATUS sap_get_channel_list(ptSapContext sap_ctx,
 #else
 		list[ch_count] = CDS_CHANNEL_NUM(loop_count);
 		ch_count++;
-#endif
-#ifdef FEATURE_WLAN_CH_AVOID
-				}
-				break;
-			}
-		}
 #endif
 	}
 
