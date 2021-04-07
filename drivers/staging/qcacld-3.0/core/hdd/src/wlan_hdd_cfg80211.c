@@ -18395,7 +18395,7 @@ static bool wlan_hdd_reassoc_bssid_hint(hdd_adapter_t *adapter,
 		if (status)
 			hdd_set_roaming_in_progress(false);
 
-		hdd_debug("hdd_reassoc: status: %d", status);
+		hdd_debug("hdd_reassoc: status: %p", status);
 	}
 	return reassoc;
 }
