@@ -50,7 +50,7 @@
 #include "wma.h"
 
 #define MAX_RATES                       12
-#define HDD_WAKE_LOCK_SCAN_DURATION (5 * 1000) /* in msec */
+#define HDD_WAKE_LOCK_SCAN_DURATION (2 * 1000) /* in msec */
 
 #define SCAN_DONE_EVENT_BUF_SIZE 4096
 #define RATE_MASK 0x7f
