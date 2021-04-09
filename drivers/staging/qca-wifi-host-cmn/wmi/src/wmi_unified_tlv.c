@@ -963,7 +963,10 @@ QDF_STATUS send_wow_enable_cmd_tlv(wmi_unified_t wmi_handle,
 		       WMITLV_GET_STRUCT_TLVLEN
 			       (wmi_wow_enable_cmd_fixed_param));
 	cmd->enable = param->enable;
-	cmd->pause_iface_config = WOW_IFACE_PAUSE_DISABLED;
+	if (param->can_suspend_link)
+		cmd->pause_iface_config = WOW_IFACE_PAUSE_ENABLED;
+	else
+		cmd->pause_iface_config = WOW_IFACE_PAUSE_DISABLED;
 	cmd->flags = param->flags;
 
 	WMI_LOGI("suspend type: %s",
