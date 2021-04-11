@@ -1246,7 +1246,6 @@ static int wlan_hdd_pld_suspend(struct device *dev,
 
 {
 	return 0;
-	return wlan_hdd_bus_suspend(state);
 }
 
 /**
@@ -1260,7 +1259,6 @@ static int wlan_hdd_pld_resume(struct device *dev,
 		    enum pld_bus_type bus_type)
 {
 	return 0;
-	return wlan_hdd_bus_resume();
 }
 
 
@@ -1281,7 +1279,6 @@ static int wlan_hdd_pld_suspend_noirq(struct device *dev,
 		     enum pld_bus_type bus_type)
 {
 	return 0;
-	return wlan_hdd_bus_suspend_noirq();
 }
 
 /**
@@ -1301,7 +1298,6 @@ static int wlan_hdd_pld_resume_noirq(struct device *dev,
 		    enum pld_bus_type bus_type)
 {
 	return 0;
-	return wlan_hdd_bus_resume_noirq();
 }
 
 /**
