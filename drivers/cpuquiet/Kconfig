@@ -46,7 +46,7 @@ endchoice
 
 config CPU_QUIET_MSM
 	bool "MSM CPUquiet Driver"
-	depends on HOTPLUG_CPU && ARCH_MSM
+	depends on HOTPLUG_CPU
 	default n
 	help
 	  This is the CPUquiet driver for MSM SoCs. It supports
