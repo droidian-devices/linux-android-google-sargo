@@ -1245,7 +1245,6 @@ static int wlan_hdd_pld_suspend(struct device *dev,
 		     pm_message_t state)
 
 {
-	return 0;
 	return wlan_hdd_bus_suspend(state);
 }
 
@@ -1259,7 +1258,6 @@ static int wlan_hdd_pld_suspend(struct device *dev,
 static int wlan_hdd_pld_resume(struct device *dev,
 		    enum pld_bus_type bus_type)
 {
-	return 0;
 	return wlan_hdd_bus_resume();
 }
 
