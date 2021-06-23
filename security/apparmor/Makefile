@@ -2,6 +2,14 @@
 #
 obj-$(CONFIG_SECURITY_APPARMOR) += apparmor.o
 
+BUILD_HOST_KERNEL := $(shell uname -s)
+ifeq ($(BUILD_HOST_KERNEL),Linux)
+	SED_TOOL := sed
+endif
+ifeq ($(BUILD_HOST_KERNEL),Darwin)
+	SED_TOOL := gsed
+endif
+
 apparmor-y := apparmorfs.o audit.o capability.o context.o ipc.o lib.o match.o \
               path.o domain.o policy.o policy_unpack.o procattr.o lsm.o \
               resource.o sid.o file.o label.o mount.o net.o af_unix.o \
@@ -25,13 +33,13 @@ clean-files := capability_names.h rlim_names.h net_names.h
 #    #define AA_FS_AF_MASK "local inet"
 quiet_cmd_make-af = GEN     $@
 cmd_make-af = echo "static const char *address_family_names[] = {" > $@ ;\
-	sed $< >>$@ -r -n -e "/AF_MAX/d" -e "/AF_LOCAL/d" -e "/AF_ROUTE/d" -e \
+	$(SED_TOOL) $< >>$@ -r -n -e "/AF_MAX/d" -e "/AF_LOCAL/d" -e "/AF_ROUTE/d" -e \
 	 's/^\#define[ \t]+AF_([A-Z0-9_]+)[ \t]+([0-9]+)(.*)/[\2] = "\L\1",/p';\
 	echo "};" >> $@ ;\
-	echo -n '\#define AA_FS_AF_MASK "' >> $@ ;\
-	sed -r -n -e "/AF_MAX/d" -e "/AF_LOCAL/d" -e "/AF_ROUTE/d" -e \
+	printf '%s' '\#define AA_FS_AF_MASK "' >> $@ ;\
+	$(SED_TOOL) -r -n -e "/AF_MAX/d" -e "/AF_LOCAL/d" -e "/AF_ROUTE/d" -e \
 	 's/^\#define[ \t]+AF_([A-Z0-9_]+)[ \t]+([0-9]+)(.*)/\L\1/p'\
-	 $< | tr '\n' ' ' | sed -e 's/ $$/"\n/' >> $@
+	 $< | tr '\n' ' ' | $(SED_TOOL) -e 's/ $$/"\n/' >> $@
 
 # Build a lower case string table of sock type names
 # Transform lines from
@@ -40,7 +48,7 @@ cmd_make-af = echo "static const char *address_family_names[] = {" > $@ ;\
 #    [1] = "stream",
 quiet_cmd_make-sock = GEN     $@
 cmd_make-sock = echo "static const char *sock_type_names[] = {" >> $@ ;\
-	sed $^ >>$@ -r -n \
+	$(SED_TOOL) $^ >>$@ -r -n \
 	-e 's/^\tSOCK_([A-Z0-9_]+)[\t]+=[ \t]+([0-9]+)(.*)/[\2] = "\L\1",/p';\
 	echo "};" >> $@
 
@@ -51,13 +59,13 @@ cmd_make-sock = echo "static const char *sock_type_names[] = {" >> $@ ;\
 #    [1] = "dac_override",
 quiet_cmd_make-caps = GEN     $@
 cmd_make-caps = echo "static const char *const capability_names[] = {" > $@ ;\
-	sed $< >>$@ -r -n -e '/CAP_FS_MASK/d' \
+	$(SED_TOOL) $< >>$@ -r -n -e '/CAP_FS_MASK/d' \
 	-e 's/^\#define[ \t]+CAP_([A-Z0-9_]+)[ \t]+([0-9]+)/[\2] = "\L\1",/p';\
 	echo "};" >> $@ ;\
-	echo -n '\#define AA_FS_CAPS_MASK "' >> $@ ;\
-	sed $< -r -n -e '/CAP_FS_MASK/d' \
+	printf '%s' '\#define AA_FS_CAPS_MASK "' >> $@ ;\
+	$(SED_TOOL) $< -r -n -e '/CAP_FS_MASK/d' \
 	    -e 's/^\#define[ \t]+CAP_([A-Z0-9_]+)[ \t]+([0-9]+)/\L\1/p' | \
-	     tr '\n' ' ' | sed -e 's/ $$/"\n/' >> $@
+	     tr '\n' ' ' | $(SED_TOOL) -e 's/ $$/"\n/' >> $@
 
 
 # Build a lower case string table of rlimit names.
@@ -66,7 +74,7 @@ cmd_make-caps = echo "static const char *const capability_names[] = {" > $@ ;\
 # to
 #    [RLIMIT_STACK] = "stack",
 #
-# and build a second integer table (with the second sed cmd), that maps
+# and build a second integer table (with the second $(SED_TOOL) cmd), that maps
 # RLIMIT defines to the order defined in asm-generic/resource.h  This is
 # required by policy load to map policy ordering of RLIMITs to internal
 # ordering for architectures that redefine an RLIMIT.
@@ -84,15 +92,15 @@ cmd_make-caps = echo "static const char *const capability_names[] = {" > $@ ;\
 quiet_cmd_make-rlim = GEN     $@
 cmd_make-rlim = echo "static const char *const rlim_names[RLIM_NLIMITS] = {" \
 	> $@ ;\
-	sed $< >> $@ -r -n \
+	$(SED_TOOL) $< >> $@ -r -n \
 	    -e 's/^\# ?define[ \t]+(RLIMIT_([A-Z0-9_]+)).*/[\1] = "\L\2",/p';\
 	echo "};" >> $@ ;\
 	echo "static const int rlim_map[RLIM_NLIMITS] = {" >> $@ ;\
-	sed -r -n "s/^\# ?define[ \t]+(RLIMIT_[A-Z0-9_]+).*/\1,/p" $< >> $@ ;\
+	$(SED_TOOL) -r -n "s/^\# ?define[ \t]+(RLIMIT_[A-Z0-9_]+).*/\1,/p" $< >> $@ ;\
 	echo "};" >> $@ ; \
-	echo -n '\#define AA_FS_RLIMIT_MASK "' >> $@ ;\
-	sed -r -n 's/^\# ?define[ \t]+RLIMIT_([A-Z0-9_]+).*/\L\1/p' $< | \
-	    tr '\n' ' ' | sed -e 's/ $$/"\n/' >> $@
+	printf '%s' '\#define AA_FS_RLIMIT_MASK "' >> $@ ;\
+	$(SED_TOOL) -r -n 's/^\# ?define[ \t]+RLIMIT_([A-Z0-9_]+).*/\L\1/p' $< | \
+	    tr '\n' ' ' | $(SED_TOOL) -e 's/ $$/"\n/' >> $@
 
 $(obj)/capability.o : $(obj)/capability_names.h
 $(obj)/net.o : $(obj)/net_names.h
