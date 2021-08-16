@@ -1938,12 +1938,12 @@ static void fastrpc_init(struct fastrpc_apps *me)
 	me->channel[CDSP_DOMAIN_ID].secure = NON_SECURE_CHANNEL;
 }
 
-static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl, unsigned long timeout);
+static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl, long timeout);
 
 static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 				   uint32_t kernel,
 				   struct fastrpc_ioctl_invoke_crc *inv,
-				   unsigned long timeout)
+				   long timeout)
 {
 	struct smq_invoke_ctx *ctx = NULL;
 	struct fastrpc_ioctl_invoke *invoke = &inv->inv;
@@ -2320,7 +2320,7 @@ bail:
 	return err;
 }
 
-static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl, unsigned long timeout)
+static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl, long timeout)
 {
 	int err = 0;
 	struct fastrpc_ioctl_invoke_crc ioctl;
