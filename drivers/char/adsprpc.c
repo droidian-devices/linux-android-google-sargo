@@ -1938,11 +1938,12 @@ static void fastrpc_init(struct fastrpc_apps *me)
 	me->channel[CDSP_DOMAIN_ID].secure = NON_SECURE_CHANNEL;
 }
 
-static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl);
+static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl, unsigned long timeout);
 
 static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 				   uint32_t kernel,
-				   struct fastrpc_ioctl_invoke_crc *inv)
+				   struct fastrpc_ioctl_invoke_crc *inv,
+				   unsigned long timeout)
 {
 	struct smq_invoke_ctx *ctx = NULL;
 	struct fastrpc_ioctl_invoke *invoke = &inv->inv;
@@ -1951,6 +1952,7 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 	int err = 0;
 	struct timespec invoket = {0};
 	int64_t *perf_counter = getperfcounter(fl, PERF_COUNT);
+	unsigned long work_completion = 0;
 
 	if (fl->profile)
 		getnstimeofday(&invoket);
@@ -2001,9 +2003,16 @@ static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 	if (err)
 		goto bail;
  wait:
-	if (kernel)
-		wait_for_completion(&ctx->work);
-	else {
+	if (kernel) {
+		if (timeout >= 0) {
+			work_completion = wait_for_completion_timeout(&ctx->work,
+				msecs_to_jiffies(timeout));
+			if (work_completion == 0)
+				goto bail;
+		} else {
+			wait_for_completion(&ctx->work);
+		}
+	} else {
 		interrupted = wait_for_completion_interruptible(&ctx->work);
 		VERIFY(err, 0 == (err = interrupted));
 		if (err)
@@ -2107,7 +2116,7 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 			fl->pd = 2;
 		}
 		VERIFY(err, !(err = fastrpc_internal_invoke(fl,
-			FASTRPC_MODE_PARALLEL, 1, &ioctl)));
+			FASTRPC_MODE_PARALLEL, 1, &ioctl, -1)));
 		if (err)
 			goto bail;
 	} else if (init->flags == FASTRPC_INIT_CREATE) {
@@ -2198,7 +2207,7 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 		ioctl.attrs = NULL;
 		ioctl.crc = NULL;
 		VERIFY(err, !(err = fastrpc_internal_invoke(fl,
-			FASTRPC_MODE_PARALLEL, 1, &ioctl)));
+			FASTRPC_MODE_PARALLEL, 1, &ioctl, -1)));
 		if (err)
 			goto bail;
 	} else if (init->flags == FASTRPC_INIT_CREATE_STATIC) {
@@ -2283,7 +2292,7 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 		ioctl.attrs = NULL;
 		ioctl.crc = NULL;
 		VERIFY(err, !(err = fastrpc_internal_invoke(fl,
-			FASTRPC_MODE_PARALLEL, 1, &ioctl)));
+			FASTRPC_MODE_PARALLEL, 1, &ioctl, -1)));
 		if (err)
 			goto bail;
 	} else {
@@ -2311,7 +2320,7 @@ bail:
 	return err;
 }
 
-static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl)
+static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl, unsigned long timeout)
 {
 	int err = 0;
 	struct fastrpc_ioctl_invoke_crc ioctl;
@@ -2334,7 +2343,7 @@ static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl)
 	ioctl.attrs = NULL;
 	ioctl.crc = NULL;
 	VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl,
-		FASTRPC_MODE_PARALLEL, 1, &ioctl)));
+		FASTRPC_MODE_PARALLEL, 1, &ioctl, timeout)));
 bail:
 	return err;
 }
@@ -2383,7 +2392,7 @@ static int fastrpc_mmap_on_dsp(struct fastrpc_file *fl, uint32_t flags,
 	ioctl.attrs = NULL;
 	ioctl.crc = NULL;
 	VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl,
-		FASTRPC_MODE_PARALLEL, 1, &ioctl)));
+		FASTRPC_MODE_PARALLEL, 1, &ioctl, -1)));
 	*raddr = (uintptr_t)routargs.vaddrout;
 	if (err)
 		goto bail;
@@ -2438,7 +2447,7 @@ static int fastrpc_munmap_on_dsp_rh(struct fastrpc_file *fl, uint64_t phys,
 			goto bail;
 
 		VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl,
-				FASTRPC_MODE_PARALLEL, 1, &ioctl)));
+				FASTRPC_MODE_PARALLEL, 1, &ioctl, -1)));
 		if (err)
 			goto bail;
 		desc.args[0] = TZ_PIL_AUTH_QDSP6_PROC;
@@ -2489,7 +2498,7 @@ static int fastrpc_munmap_on_dsp(struct fastrpc_file *fl, uintptr_t raddr,
 	ioctl.attrs = NULL;
 	ioctl.crc = NULL;
 	VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl,
-		FASTRPC_MODE_PARALLEL, 1, &ioctl)));
+		FASTRPC_MODE_PARALLEL, 1, &ioctl, -1)));
 	if (err)
 		goto bail;
 	if (flags == ADSP_MMAP_HEAP_ADDR ||
@@ -2889,7 +2898,7 @@ static int fastrpc_file_free(struct fastrpc_file *fl)
 		return 0;
 	cid = fl->cid;
 
-	(void)fastrpc_release_current_dsp_process(fl);
+	(void)fastrpc_release_current_dsp_process(fl, 5000);
 
 	spin_lock(&fl->apps->hlock);
 	hlist_del_init(&fl->hn);
@@ -3570,7 +3579,7 @@ static long fastrpc_device_ioctl(struct file *file, unsigned int ioctl_num,
 		if (err)
 			goto bail;
 		VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl, fl->mode,
-						0, &p.inv)));
+						0, &p.inv, -1)));
 		if (err)
 			goto bail;
 		break;
