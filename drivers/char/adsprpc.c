@@ -1938,8 +1938,6 @@ static void fastrpc_init(struct fastrpc_apps *me)
 	me->channel[CDSP_DOMAIN_ID].secure = NON_SECURE_CHANNEL;
 }
 
-static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl);
-
 static int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,
 				   uint32_t kernel,
 				   struct fastrpc_ioctl_invoke_crc *inv)
@@ -2308,34 +2306,6 @@ bail:
 		fastrpc_mmap_free(file, 0);
 		mutex_unlock(&fl->fl_map_mutex);
 	}
-	return err;
-}
-
-static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl)
-{
-	int err = 0;
-	struct fastrpc_ioctl_invoke_crc ioctl;
-	remote_arg_t ra[1];
-	int tgid = 0;
-
-	VERIFY(err, fl->cid >= 0 && fl->cid < NUM_CHANNELS);
-	if (err)
-		goto bail;
-	VERIFY(err, fl->apps->channel[fl->cid].chan != NULL);
-	if (err)
-		goto bail;
-	tgid = fl->tgid;
-	ra[0].buf.pv = (void *)&tgid;
-	ra[0].buf.len = sizeof(tgid);
-	ioctl.inv.handle = 1;
-	ioctl.inv.sc = REMOTE_SCALARS_MAKE(1, 1, 0);
-	ioctl.inv.pra = ra;
-	ioctl.fds = NULL;
-	ioctl.attrs = NULL;
-	ioctl.crc = NULL;
-	VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl,
-		FASTRPC_MODE_PARALLEL, 1, &ioctl)));
-bail:
 	return err;
 }
 
@@ -2888,8 +2858,6 @@ static int fastrpc_file_free(struct fastrpc_file *fl)
 	if (!fl)
 		return 0;
 	cid = fl->cid;
-
-	(void)fastrpc_release_current_dsp_process(fl);
 
 	spin_lock(&fl->apps->hlock);
 	hlist_del_init(&fl->hn);
