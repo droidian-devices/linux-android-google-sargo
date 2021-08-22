@@ -554,7 +554,7 @@ static void bd_init(struct bd_data *bd_state, struct device *dev)
 	/* also call to resume charging */
 	bd_reset(bd_state);
 	if (!bd_state->enabled)
-		dev_warn(dev, "TEMP-DEFEND not enabled\n", ret);
+		dev_warn(dev, "TEMP-DEFEND not enabled: %d\n", ret);
 
 	pr_info("MSC_BD: trig volt=%d,%d temp=%d,time=%d drainto=%d,%d resume=%d,%d %d,%d\n",
 		bd_state->bd_trigger_voltage, bd_state->bd_recharge_voltage,
@@ -608,12 +608,12 @@ static int bd_update_stats(struct bd_data *bd_state,
 	/* exit and entry criteria */
 	temp_avg = bd_state->temp_sum / bd_state->time_sum;
 	if (triggered && temp <= bd_state->bd_resume_abs_temp) {
-		pr_info("MSC_BD: resume time_sum=%lld, temp_sum=%lld, temp_avg=%d\n",
-			bd_state->time_sum, bd_state->temp_sum, temp_avg);
+		pr_info("MSC_BD: resume temp_sum=%lld, temp_avg=%lld\n",
+			bd_state->temp_sum, temp_avg);
 		bd_reset(bd_state);
 	} else if (temp_avg >= bd_state->bd_trigger_temp) {
-		pr_info("MSC_BD: trigger time_sum=%lld, temp_sum=%lld, temp_avg=%d\n",
-			bd_state->time_sum, bd_state->temp_sum, temp_avg);
+		pr_info("MSC_BD: trigger temp_sum=%lld, temp_avg=%lld\n",
+			bd_state->temp_sum, temp_avg);
 		bd_state->triggered = 1;
 	}
 
@@ -781,9 +781,8 @@ static void bd_work(struct work_struct *work)
 		}
 	}
 
-	pr_info("MSC_BD_WORK: triggered=%d time=%lld < %lld soc=%d > %d temp=%lld > %d\n",
+	pr_info("MSC_BD_WORK: triggered=%d soc=%d > %d temp=%d > %d\n",
 		bd_state->triggered,
-		delta_time, bd_state->bd_resume_time,
 		soc, bd_state->bd_resume_soc,
 		bd_state->last_temp,
 		bd_state->bd_resume_temp);
