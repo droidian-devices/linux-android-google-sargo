@@ -1615,7 +1615,7 @@ static int get_cur_inode_state(struct send_ctx *sctx, u64 ino, u64 gen)
 	int ret;
 	int left_ret;
 	int right_ret;
-	u64 left_gen;
+	u64 left_gen = 0;
 	u64 right_gen;
 
 	ret = get_inode_info(sctx->send_root, ino, NULL, &left_gen, NULL, NULL,
