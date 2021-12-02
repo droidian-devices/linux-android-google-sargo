@@ -1,8 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
- *
- * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
- *
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -234,6 +231,24 @@ tSirRetStatus rrm_set_max_tx_power_rsp(tpAniSirGlobal pMac, tpSirMsgQ limMsgQ)
 	return retCode;
 }
 
+/**
+ * rrm_calculate_and_fill_rcpi() - calculates and fills RCPI value
+ * @rcpi: pointer to hold calculated RCPI value
+ * @cur_rssi: value of current RSSI
+ *
+ * @return None
+ */
+static void rrm_calculate_and_fill_rcpi(uint8_t *rcpi, int8_t cur_rssi)
+{
+	/* 2008 11k spec reference: 18.4.8.5 RCPI Measurement */
+	if (cur_rssi <= RCPI_LOW_RSSI_VALUE)
+		*rcpi = 0;
+	else if ((cur_rssi > RCPI_LOW_RSSI_VALUE) && (cur_rssi <= 0))
+		*rcpi = CALCULATE_RCPI(cur_rssi);
+	else
+		*rcpi = RCPI_MAX_VALUE;
+}
+
 /* -------------------------------------------------------------------- */
 /**
  * rrm_process_link_measurement_request
@@ -294,14 +309,7 @@ rrm_process_link_measurement_request(tpAniSirGlobal pMac,
 
 	pe_debug("Received Link report frame with %d", currentRSSI);
 
-	/* 2008 11k spec reference: 18.4.8.5 RCPI Measurement */
-	if ((currentRSSI) <= RCPI_LOW_RSSI_VALUE)
-		LinkReport.rcpi = 0;
-	else if ((currentRSSI > RCPI_LOW_RSSI_VALUE) && (currentRSSI <= 0))
-		LinkReport.rcpi = CALCULATE_RCPI(currentRSSI);
-	else
-		LinkReport.rcpi = RCPI_MAX_VALUE;
-
+	rrm_calculate_and_fill_rcpi(&LinkReport.rcpi, currentRSSI);
 	LinkReport.rsni = WMA_GET_RX_SNR(pRxPacketInfo);
 
 	pe_debug("Sending Link report frame");
@@ -570,6 +578,11 @@ rrm_process_beacon_report_req(tpAniSirGlobal pMac,
 		reportingDetail : BEACON_REPORTING_DETAIL_ALL_FF_IE;
 
 	if (pBeaconReq->measurement_request.Beacon.RequestedInfo.present) {
+		if (!pBeaconReq->measurement_request.Beacon.RequestedInfo.
+		    num_requested_eids) {
+			pe_debug("802.11k BCN RPT: Requested num of EID is 0");
+			return eRRM_FAILURE;
+		}
 		pCurrentReq->request.Beacon.reqIes.pElementIds =
 			qdf_mem_malloc(sizeof(uint8_t) *
 				       pBeaconReq->measurement_request.Beacon.
@@ -578,6 +591,7 @@ rrm_process_beacon_report_req(tpAniSirGlobal pMac,
 			pe_err("Unable to allocate memory for request IEs buffer");
 			return eRRM_FAILURE;
 		}
+
 		pCurrentReq->request.Beacon.reqIes.num =
 			pBeaconReq->measurement_request.Beacon.RequestedInfo.
 			num_requested_eids;
@@ -585,6 +599,11 @@ rrm_process_beacon_report_req(tpAniSirGlobal pMac,
 			     pBeaconReq->measurement_request.Beacon.
 			     RequestedInfo.requested_eids,
 			     pCurrentReq->request.Beacon.reqIes.num);
+		pe_debug("802.11k BCN RPT: Requested EIDs: num:[%d]",
+			 pCurrentReq->request.Beacon.reqIes.num);
+		QDF_TRACE_HEX_DUMP(QDF_MODULE_ID_PE, QDF_TRACE_LEVEL_DEBUG,
+				pCurrentReq->request.Beacon.reqIes.pElementIds,
+				pCurrentReq->request.Beacon.reqIes.num);
 	}
 
 	if (pBeaconReq->measurement_request.Beacon.num_APChannelReport) {
@@ -721,10 +740,17 @@ rrm_fill_beacon_ies(tpAniSirGlobal pMac,
 	*pNumIes += sizeof(uint16_t);
 	pIes += sizeof(uint16_t);
 
-	while (BcnNumIes > 0) {
-		len = *(pBcnIes + 1) + 2;       /* element id + length. */
+	while (BcnNumIes >= 2) {
+		len = *(pBcnIes + 1);
+		len += 2;       /* element id + length. */
 		pe_debug("EID = %d, len = %d total = %d",
 			*pBcnIes, *(pBcnIes + 1), len);
+
+		if (BcnNumIes < len) {
+			pe_err("RRM: Invalid IE len:%d exp_len:%d",
+			       len, BcnNumIes);
+			break;
+		}
 
 		i = 0;
 		do {
@@ -840,7 +866,9 @@ rrm_process_beacon_report_xmit(tpAniSirGlobal mac_ctx,
 				beacon_report->phyType = bss_desc->nwType;
 				beacon_report->bcnProbeRsp = 1;
 				beacon_report->rsni = bss_desc->sinr;
-				beacon_report->rcpi = bss_desc->rssi;
+
+				rrm_calculate_and_fill_rcpi(&beacon_report->rcpi,
+							    bss_desc->rssi);
 				beacon_report->antennaId = 0;
 				beacon_report->parentTSF = bss_desc->parentTSF;
 				qdf_mem_copy(beacon_report->bssid,
@@ -1043,28 +1071,30 @@ tSirRetStatus rrm_process_beacon_req(tpAniSirGlobal mac_ctx, tSirMacAddr peer,
  */
 static
 tSirRetStatus update_rrm_report(tpAniSirGlobal mac_ctx,
-				tpSirMacRadioMeasureReport report,
+				tpSirMacRadioMeasureReport *report,
 				tDot11fRadioMeasurementRequest *rrm_req,
 				uint8_t *num_report, int index)
 {
-	if (report == NULL) {
+	tpSirMacRadioMeasureReport rrm_report;
+
+	if (!*report) {
 		/*
 		 * Allocate memory to send reports for
 		 * any subsequent requests.
 		 */
-		report = qdf_mem_malloc(sizeof(*report) *
+		*report = qdf_mem_malloc(sizeof(tSirMacRadioMeasureReport) *
 			 (rrm_req->num_MeasurementRequest - index));
-		if (NULL == report) {
-			pe_err("Unable to allocate memory during RRM Req processing");
+		if (!*report) {
+			pe_err("Fail to alloc mem during RRM Req processing");
 			return eSIR_MEM_ALLOC_FAILED;
 		}
-		pe_debug("rrm beacon type incapable of %d report",
-			*num_report);
+		pe_debug("rrm beacon type incapable of %d report", *num_report);
 	}
-	report[*num_report].incapable = 1;
-	report[*num_report].type =
+	rrm_report = *report;
+	rrm_report[*num_report].incapable = 1;
+	rrm_report[*num_report].type =
 		rrm_req->MeasurementRequest[index].measurement_type;
-	report[*num_report].token =
+	rrm_report[*num_report].token =
 		 rrm_req->MeasurementRequest[index].measurement_token;
 	(*num_report)++;
 	return eSIR_SUCCESS;
@@ -1146,7 +1176,7 @@ rrm_process_radio_measurement_request(tpAniSirGlobal mac_ctx,
 			break;
 		default:
 			/* Send a report with incapabale bit set. */
-			status = update_rrm_report(mac_ctx, report, rrm_req,
+			status = update_rrm_report(mac_ctx, &report, rrm_req,
 						   &num_report, i);
 			if (eSIR_SUCCESS != status)
 				return status;

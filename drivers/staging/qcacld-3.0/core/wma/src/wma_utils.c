@@ -1413,7 +1413,8 @@ static int wma_unified_link_peer_stats_event_handler(void *handle,
 	 */
 	pMac->sme.pLinkLayerStatsIndCallback(pMac->hHdd,
 					     WMA_LINK_LAYER_STATS_RESULTS_RSP,
-					     link_stats_results);
+					     link_stats_results,
+					     pMac->sme.ll_stats_context);
 	qdf_mem_free(link_stats_results);
 
 	return 0;
@@ -1437,7 +1438,6 @@ int wma_unified_radio_tx_mem_free(void *handle)
 	rs_results = (tSirWifiRadioStat *)
 				&wma_handle->link_stats_results->results[0];
 	for (i = 0; i < wma_handle->link_stats_results->num_radio; i++) {
-		rs_results += i;
 		if (rs_results->tx_time_per_power_level) {
 			qdf_mem_free(rs_results->tx_time_per_power_level);
 			rs_results->tx_time_per_power_level = NULL;
@@ -1447,6 +1447,7 @@ int wma_unified_radio_tx_mem_free(void *handle)
 			qdf_mem_free(rs_results->channels);
 			rs_results->channels = NULL;
 		}
+		rs_results++;
 	}
 
 	qdf_mem_free(wma_handle->link_stats_results);
@@ -1617,8 +1618,9 @@ post_stats:
 	 * used to retrieve the correct HDD context
 	 */
 	mac->sme.pLinkLayerStatsIndCallback(mac->hHdd,
-		WMA_LINK_LAYER_STATS_RESULTS_RSP,
-		link_stats_results);
+					    WMA_LINK_LAYER_STATS_RESULTS_RSP,
+					    link_stats_results,
+					    mac->sme.ll_stats_context);
 	wma_unified_radio_tx_mem_free(handle);
 
 	return 0;
@@ -1718,6 +1720,18 @@ static int wma_unified_link_radio_stats_event_handler(void *handle,
 		}
 	}
 	link_stats_results = wma_handle->link_stats_results;
+	if (link_stats_results->num_radio == 0) {
+		link_stats_results->num_radio = fixed_param->num_radio;
+	} else if (link_stats_results->num_radio < fixed_param->num_radio) {
+		/*
+		 * The link stats results size allocated based on num_radio of
+		 * first event must be same as following events. Otherwise these
+		 * events may be spoofed. Drop all of them and report error.
+		 */
+		WMA_LOGE("Invalid following WMI_RADIO_LINK_STATS_EVENTID. Discarding this set");
+		wma_unified_radio_tx_mem_free(handle);
+		return -EINVAL;
+	}
 
 	WMA_LOGD("Radio stats Fixed Param:");
 	WMA_LOGD("req_id: %u num_radio: %u more_radio_events: %u",
@@ -1829,7 +1843,8 @@ static int wma_unified_link_radio_stats_event_handler(void *handle,
 
 	pMac->sme.pLinkLayerStatsIndCallback(pMac->hHdd,
 					     WMA_LINK_LAYER_STATS_RESULTS_RSP,
-					     link_stats_results);
+					     link_stats_results,
+					     pMac->sme.ll_stats_context);
 	wma_unified_radio_tx_mem_free(handle);
 
 	return 0;
@@ -2307,7 +2322,8 @@ int wma_unified_link_iface_stats_event_handler(void *handle,
 	 */
 	pMac->sme.pLinkLayerStatsIndCallback(pMac->hHdd,
 					     WMA_LINK_LAYER_STATS_RESULTS_RSP,
-					     link_stats_results);
+					     link_stats_results,
+					     pMac->sme.ll_stats_context);
 	qdf_mem_free(link_stats_results);
 
 	return 0;
@@ -6331,23 +6347,23 @@ int wma_roam_scan_stats_event_handler(void *handle, uint8_t *event,
 						     &res);
 
 	/* vdev_id can be invalid though status is success, hence validate */
-	if (vdev_id >= wma_handle->max_bssid) {
+		if (vdev_id >= wma_handle->max_bssid) {
 		WMA_LOGE(FL("Received invalid vdev_id: %d"), vdev_id);
 		ret  = -EINVAL;
 		goto free_res;
-	}
+		}
 
 	/* Get interface for valid vdev_id */
-	iface = &wma_handle->interfaces[vdev_id];
+		iface = &wma_handle->interfaces[vdev_id];
 	if (!iface) {
 		WMI_LOGE(FL("Interface not available for vdev_id: %d"),
 			 vdev_id);
 		ret  = -EINVAL;
 		goto free_res;
-	}
+		}
 
-	roam_scan_stats_req = iface->roam_scan_stats_req;
-	iface->roam_scan_stats_req = NULL;
+		roam_scan_stats_req = iface->roam_scan_stats_req;
+		iface->roam_scan_stats_req = NULL;
 	if (!roam_scan_stats_req) {
 		WMI_LOGE(FL("No pending request vdev_id: %d"), vdev_id);
 		ret  = -EINVAL;
@@ -6365,12 +6381,12 @@ int wma_roam_scan_stats_event_handler(void *handle, uint8_t *event,
 	(roam_scan_stats_req->cb)(roam_scan_stats_req->context, res);
 
 free_roam_scan_stats_req:
-	qdf_mem_free(roam_scan_stats_req);
+		qdf_mem_free(roam_scan_stats_req);
 	roam_scan_stats_req = NULL;
 
 free_res:
-	qdf_mem_free(res);
-	res = NULL;
+		qdf_mem_free(res);
+		res = NULL;
 
 	return ret;
 }

@@ -825,6 +825,38 @@ free_ch_lst:
 }
 
 /**
+ * sme_rrm_calculate_total_scan_time() - calculate total time req for
+ * scan for all channels
+ * @mac_ctx: The handle returned by mac_open.
+ *
+ * Return: total rrm scan time
+ */
+static uint32_t sme_rrm_calculate_total_scan_time(tpAniSirGlobal mac_ctx)
+{
+	uint32_t dwell_time_active;
+	uint16_t interval;
+	tpRrmSMEContext pSmeRrmContext = &mac_ctx->rrm.rrmSmeContext;
+	uint8_t num_channels;
+	uint32_t rrm_scan_time = 0;
+
+	num_channels = pSmeRrmContext->channelList.numOfChannels;
+
+	interval = pSmeRrmContext->randnIntvl + 10;
+
+	dwell_time_active = pSmeRrmContext->duration[0];
+
+	/*
+	 * Add 1 sec extra in actual total rrm scan time
+	 * to accommodate any delay
+	 */
+	if (num_channels)
+		rrm_scan_time = ((num_channels * dwell_time_active) +
+				 ((num_channels - 1) * interval) + 1000);
+
+	return rrm_scan_time;
+}
+
+/**
  * sme_rrm_process_beacon_report_req_ind() -Process beacon report request
  * @pMac:- Global Mac structure
  * @pMsgBuf:- a pointer to a buffer that maps to various structures base
@@ -842,9 +874,18 @@ QDF_STATUS sme_rrm_process_beacon_report_req_ind(tpAniSirGlobal pMac,
 	tpSirBeaconReportReqInd pBeaconReq = (tpSirBeaconReportReqInd) pMsgBuf;
 	tpRrmSMEContext pSmeRrmContext = &pMac->rrm.rrmSmeContext;
 	uint32_t len = 0, i = 0;
+	uint32_t total_rrm_scan_time;
 
 	sme_debug("Received Beacon report request ind Channel = %d",
 		pBeaconReq->channelInfo.channelNum);
+
+	if (pBeaconReq->channelList.numChannels >
+	    SIR_ESE_MAX_MEAS_IE_REQS) {
+		sme_err("Beacon report request numChannels:%u exceeds max num channels",
+			pBeaconReq->channelList.numChannels);
+		return QDF_STATUS_E_INVAL;
+	}
+
 	/* section 11.10.8.1 (IEEE Std 802.11k-2008) */
 	/* channel 0 and 255 has special meaning. */
 	if ((pBeaconReq->channelInfo.channelNum == 0) ||
@@ -932,6 +973,12 @@ QDF_STATUS sme_rrm_process_beacon_report_req_ind(tpAniSirGlobal pMac,
 	sme_debug("token: %d regClass: %d randnIntvl: %d msgSource: %d",
 		pSmeRrmContext->token, pSmeRrmContext->regClass,
 		pSmeRrmContext->randnIntvl, pSmeRrmContext->msgSource);
+
+	total_rrm_scan_time = sme_rrm_calculate_total_scan_time(pMac);
+
+	if (total_rrm_scan_time)
+		qdf_wake_lock_timeout_acquire(&pSmeRrmContext->scan_wake_lock,
+					      total_rrm_scan_time);
 
 	return sme_rrm_issue_scan_req(pMac);
 }
@@ -1183,23 +1230,13 @@ static QDF_STATUS sme_rrm_process_neighbor_report(tpAniSirGlobal pMac,
 	tpRrmNeighborReportDesc pNeighborReportDesc;
 	uint8_t i = 0;
 	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
-	uint32_t sessionId;
 
-	/* Get the session id */
-	status =
-		csr_roam_get_session_id_from_bssid(pMac,
-			   (struct qdf_mac_addr *) pNeighborRpt->bssId,
-			   &sessionId);
-	if (QDF_IS_STATUS_SUCCESS(status)) {
-#ifdef FEATURE_WLAN_ESE
-		/* Clear the cache for ESE. */
-		if (csr_roam_is_ese_assoc(pMac, sessionId)) {
-			rrm_ll_purge_neighbor_cache(pMac,
-						    &pMac->rrm.rrmSmeContext.
-						    neighborReportCache);
-		}
-#endif
-	}
+	/* Purge the cache on reception of unsolicited neighbor report */
+	if (!pMac->rrm.rrmSmeContext.neighborReqControlInfo.
+			isNeighborRspPending)
+		rrm_ll_purge_neighbor_cache(pMac,
+					    &pMac->rrm.rrmSmeContext.
+					    neighborReportCache);
 
 	for (i = 0; i < pNeighborRpt->numNeighborReports; i++) {
 		pNeighborReportDesc =
@@ -1252,6 +1289,7 @@ end:
 		qdf_status = QDF_STATUS_E_FAILURE;
 
 	rrm_indicate_neighbor_report_result(pMac, qdf_status);
+
 	return status;
 }
 
@@ -1346,6 +1384,8 @@ QDF_STATUS rrm_open(tpAniSirGlobal pMac)
 	QDF_STATUS qdf_ret_status = QDF_STATUS_SUCCESS;
 
 	pSmeRrmContext->rrmConfig.max_randn_interval = 50;        /* ms */
+	qdf_wake_lock_create(&pSmeRrmContext->scan_wake_lock,
+			     "wlan_rrm_scan_wl");
 
 	qdf_status = qdf_mc_timer_init(&pSmeRrmContext->IterMeasTimer,
 				       QDF_TIMER_TYPE_SW,
@@ -1446,6 +1486,8 @@ QDF_STATUS rrm_close(tpAniSirGlobal pMac)
 	rrm_ll_purge_neighbor_cache(pMac, &pSmeRrmContext->neighborReportCache);
 
 	csr_ll_close(&pSmeRrmContext->neighborReportCache);
+
+	qdf_wake_lock_destroy(&pSmeRrmContext->scan_wake_lock);
 
 	return qdf_status;
 

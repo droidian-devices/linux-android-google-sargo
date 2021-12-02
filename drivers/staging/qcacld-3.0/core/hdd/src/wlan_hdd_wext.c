@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -3435,6 +3435,7 @@ static bool hdd_is_auth_type_rsn(eCsrAuthType authType)
 	case eCSR_AUTH_TYPE_RSN_PSK_SHA256:
 	case eCSR_AUTH_TYPE_RSN_8021X_SHA256:
 #endif
+	case eCSR_AUTH_TYPE_DPP_RSN:
 		rsnType = true;
 		break;
 	/* case eCSR_AUTH_TYPE_FAILED: */
@@ -4050,6 +4051,9 @@ void hdd_clear_roam_profile_ie(hdd_adapter_t *pAdapter)
 
 	qdf_mem_zero(pWextState->roamProfile.Keys.KeyLength, CSR_MAX_NUM_KEY);
 
+	qdf_mem_zero(pWextState->roamProfile.Keys.KeyMaterial,
+		     sizeof(pWextState->roamProfile.Keys.KeyMaterial));
+
 #ifdef FEATURE_WLAN_WAPI
 	pAdapter->wapi_info.wapiAuthMode = WAPI_AUTH_MODE_OPEN;
 	pAdapter->wapi_info.nWapiMode = 0;
@@ -4401,8 +4405,8 @@ static int __iw_get_name(struct net_device *dev,
  * Return: 0 on success, error number otherwise
  */
 static int iw_get_name(struct net_device *dev,
-		       struct iw_request_info *info,
-		       union iwreq_data *wrqu, char *extra)
+			 struct iw_request_info *info,
+			 union iwreq_data *wrqu, char *extra)
 {
 	int ret;
 

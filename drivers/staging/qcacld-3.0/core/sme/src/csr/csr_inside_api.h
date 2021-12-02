@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -94,10 +94,11 @@
 #define CSR_ACTIVE_SCAN_LIST_CMD_TIMEOUT (1000*30)
 
 /* ***************************************************************************
- * The MAX BSSID Count should be lower than the command timeout value and it
- * can be of a fraction of 1/3 to 1/2 of the total command timeout value.
+ * The MAX BSSID Count should be lower than the command timeout value.
+ * As in some case auth timeout can take upto 5 sec (in case of SAE auth) try
+ * (command timeout/5000 - 1) candidates.
  * ***************************************************************************/
-#define CSR_MAX_BSSID_COUNT     (SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE/3000) - 2
+#define CSR_MAX_BSSID_COUNT     (SME_ACTIVE_LIST_CMD_TIMEOUT_VALUE/5000) - 1
 #define CSR_CUSTOM_CONC_GO_BI    100
 extern uint8_t csr_wpa_oui[][CSR_WPA_OUI_SIZE];
 bool csr_is_supported_channel(tpAniSirGlobal pMac, uint8_t channelId);
@@ -1281,5 +1282,19 @@ static inline bool csr_is_mfpc_capable(struct sDot11fIERSN *rsn)
 	return false;
 }
 #endif
+
+/**
+ * csr_lookup_pmkid_using_bssid() - lookup pmkid using bssid
+ * @mac: pointer to mac
+ * @session: sme session pointer
+ * @pmk_cache: pointer to pmk cache
+ * @index: index value needs to be seached
+ *
+ * Return: true if pmkid is found else false
+ */
+bool csr_lookup_pmkid_using_bssid(tpAniSirGlobal mac,
+					tCsrRoamSession *session,
+					tPmkidCacheInfo *pmk_cache,
+					uint32_t *index);
 
 #endif /* CSR_INSIDE_API_H__ */

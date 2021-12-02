@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018, 2020 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -3388,7 +3388,8 @@ QDF_STATUS sme_scan_request(tHalHandle hal, uint8_t session_id,
 	msg.reserved = 0;
 	msg.bodyval = 0;
 	if (QDF_STATUS_SUCCESS !=
-		cds_mq_post_message(QDF_MODULE_ID_SME, &msg)) {
+	    cds_mq_post_message_by_priority(QDF_MODULE_ID_SME,
+					    &msg, HIGH_PRIORITY)) {
 		sme_err("sme_scan_req failed to post msg");
 		csr_scan_free_request(mac_ctx, scan_msg->scan_param);
 		qdf_mem_free(scan_msg->scan_param);
@@ -9354,6 +9355,7 @@ QDF_STATUS sme_stop_roaming(tHalHandle hal, uint8_t session_id, uint8_t reason)
 	status = wma_post_ctrl_msg(mac_ctx, &wma_msg);
 	if (eSIR_SUCCESS != status) {
 		sme_err("Posting WMA_ROAM_SCAN_OFFLOAD_REQ failed");
+		qdf_mem_zero(req, sizeof(tSirRoamOffloadScanReq));
 		qdf_mem_free(req);
 		return QDF_STATUS_E_FAULT;
 	}
@@ -13925,21 +13927,12 @@ QDF_STATUS sme_update_dsc_pto_up_mapping(tHalHandle hHal,
 	}
 	for (i = 0; i < SME_QOS_WMM_UP_MAX; i++) {
 		for (j = pSession->QosMapSet.dscp_range[i][0];
-			j <= pSession->QosMapSet.dscp_range[i][1];
-			j++) {
-			if ((pSession->QosMapSet.dscp_range[i][0] == 255)
-				&& (pSession->QosMapSet.dscp_range[i][1] ==
-							255)) {
-				QDF_TRACE(QDF_MODULE_ID_SME,
-					QDF_TRACE_LEVEL_ERROR,
-					FL("User Priority %d isn't used"), i);
-				break;
-			}
+			j <= pSession->QosMapSet.dscp_range[i][1] &&
+			j <= WLAN_MAX_DSCP; j++)
 			dscpmapping[j] = i;
-		}
 	}
 	for (i = 0; i < pSession->QosMapSet.num_dscp_exceptions; i++)
-		if (pSession->QosMapSet.dscp_exceptions[i][0] != 255)
+		if (pSession->QosMapSet.dscp_exceptions[i][0] <= WLAN_MAX_DSCP)
 			dscpmapping[pSession->QosMapSet.dscp_exceptions[i][0]] =
 				pSession->QosMapSet.dscp_exceptions[i][1];
 
@@ -14731,11 +14724,12 @@ QDF_STATUS sme_ll_stats_set_req(tHalHandle hHal, tSirLLStatsSetReq
  *
  * @hHal
  * @pgetStatsReq: Link Layer get stats request params structure
+ * @context: Callback context for ll stats
  *
  * Return QDF_STATUS
  */
 QDF_STATUS sme_ll_stats_get_req(tHalHandle hHal, tSirLLStatsGetReq
-				*pgetStatsReq)
+				*pgetStatsReq, void *context)
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
@@ -14754,6 +14748,7 @@ QDF_STATUS sme_ll_stats_get_req(tHalHandle hHal, tSirLLStatsGetReq
 
 	*get_stats_req = *pgetStatsReq;
 
+	pMac->sme.ll_stats_context = context;
 	if (QDF_STATUS_SUCCESS == sme_acquire_global_lock(&pMac->sme)) {
 		/* Serialize the req through MC thread */
 		cds_message.bodyptr = get_stats_req;
@@ -14783,16 +14778,17 @@ QDF_STATUS sme_ll_stats_get_req(tHalHandle hHal, tSirLLStatsGetReq
 
 /**
  * sme_set_link_layer_stats_ind_cb() - SME API to trigger the stats are
- * available  after get request
+ * available after get request
  *
- * @hHal
- * @callback_routine - HDD callback which needs to be invoked after
- *	   getting status notification from FW
+ * @hHal: handle in hdd context
+ * @callback_routine: HDD callback which needs to be invoked after
+ * getting status notification from FW
  *
  * Return QDF_STATUS
  */
 QDF_STATUS sme_set_link_layer_stats_ind_cb(tHalHandle hHal,
-	void (*callback_routine)(void *callbackCtx, int indType, void *pRsp))
+	void (*callback_routine)(void *callbackCtx, int indType, void *pRsp,
+				 void *context))
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	tpAniSirGlobal pMac = PMAC_STRUCT(hHal);
@@ -18380,8 +18376,10 @@ send_flush_cmd:
 	    cds_mq_post_message(QDF_MODULE_ID_WMA, &msg)) {
 		sme_err("Not able to post message to WDA");
 
-		if (pmk_cache)
+		if (pmk_cache) {
+			qdf_mem_zero(pmk_cache, sizeof(*pmk_cache));
 			qdf_mem_free(pmk_cache);
+		}
 
 		return QDF_STATUS_E_FAILURE;
 	}
@@ -19259,65 +19257,22 @@ QDF_STATUS sme_fast_reassoc(tHalHandle hal, tCsrRoamProfile *profile,
 			    const tSirMacAddr bssid, int channel,
 			    uint8_t vdev_id, const tSirMacAddr connected_bssid)
 {
-	QDF_STATUS status;
-	struct wma_roam_invoke_cmd *fastreassoc;
-	cds_msg_t msg = {0};
+	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	tpAniSirGlobal mac_ctx = PMAC_STRUCT(hal);
 
-	fastreassoc = qdf_mem_malloc(sizeof(*fastreassoc));
-	if (NULL == fastreassoc) {
-		sme_err("qdf_mem_malloc failed for fastreassoc");
-		return QDF_STATUS_E_NOMEM;
-	}
-	/* if both are same then set the flag */
-	if (!qdf_mem_cmp(connected_bssid, bssid, ETH_ALEN)) {
-		fastreassoc->is_same_bssid = true;
-		sme_debug("bssid same, bssid[%pM]", bssid);
-	}
-	fastreassoc->vdev_id = vdev_id;
-	fastreassoc->bssid[0] = bssid[0];
-	fastreassoc->bssid[1] = bssid[1];
-	fastreassoc->bssid[2] = bssid[2];
-	fastreassoc->bssid[3] = bssid[3];
-	fastreassoc->bssid[4] = bssid[4];
-	fastreassoc->bssid[5] = bssid[5];
+	if (!mac_ctx)
+		return QDF_STATUS_E_FAILURE;
 
-	status = sme_get_beacon_frm(hal, profile, bssid,
-				    &fastreassoc->frame_buf,
-				    &fastreassoc->frame_len,
-				    &channel);
-
-	if (!channel) {
-		sme_err("channel retrieval from BSS desc fails!");
-		qdf_mem_free(fastreassoc);
-		return QDF_STATUS_E_FAULT;
+	if (!CSR_IS_SESSION_VALID(mac_ctx, vdev_id)) {
+		sme_err("Invalid vdev_id: %d", vdev_id);
+		return QDF_STATUS_E_INVAL;
 	}
 
-	fastreassoc->channel = channel;
-	if (QDF_STATUS_SUCCESS != status) {
-		sme_warn("sme_get_beacon_frm failed");
-		fastreassoc->frame_buf = NULL;
-		fastreassoc->frame_len = 0;
-	}
-
-	if (csr_is_auth_type_ese(mac_ctx->roam.roamSession[vdev_id].
-				connectedProfile.AuthType)) {
-		sme_debug("Beacon is not required for ESE");
-		if (fastreassoc->frame_len) {
-			qdf_mem_free(fastreassoc->frame_buf);
-			fastreassoc->frame_buf = NULL;
-			fastreassoc->frame_len = 0;
-		}
-	}
-
-	msg.type = SIR_HAL_ROAM_INVOKE;
-	msg.reserved = 0;
-	msg.bodyptr = fastreassoc;
-	status = cds_mq_post_message(QDF_MODULE_ID_WMA, &msg);
-	if (QDF_STATUS_SUCCESS != status) {
-		sme_err("Not able to post ROAM_INVOKE_CMD message to WMA");
-		qdf_mem_free(fastreassoc);
-	}
+	if (QDF_IS_STATUS_ERROR(sme_acquire_global_lock(&mac_ctx->sme)))
+		return QDF_STATUS_E_FAILURE;
+	status = csr_fast_reassoc(hal, profile, bssid, channel, vdev_id,
+				  connected_bssid);
+	sme_release_global_lock(&mac_ctx->sme);
 
 	return status;
 }
@@ -19395,8 +19350,86 @@ bool sme_validate_channel_list(tHalHandle hal,
 	}
 	return true;
 }
-
-QDF_STATUS sme_get_scan_id(uint32_t *scan_id)
+/**
+ * sme_prepare_mgmt_tx() - Prepares mgmt frame
+ * @hal: The handle returned by mac_open
+ * @session_id: session id
+ * @buf: pointer to frame
+ * @len: frame length
+ *
+ * Return: QDF_STATUS
+ */
+static QDF_STATUS sme_prepare_mgmt_tx(tHalHandle hal, uint8_t session_id,
+			   const uint8_t *buf, uint32_t len)
 {
-	return wma_get_scan_id(scan_id);
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	struct sir_mgmt_msg *msg;
+	uint16_t msg_len;
+
+	sme_debug("prepares auth frame");
+
+	msg_len = sizeof(*msg) + len;
+	msg = qdf_mem_malloc(msg_len);
+	if (msg == NULL) {
+		status = QDF_STATUS_E_NOMEM;
+	} else {
+		msg->type = eWNI_SME_SEND_MGMT_FRAME_TX;
+		msg->msg_len = msg_len;
+		msg->session_id = session_id;
+		msg->data = (uint8_t *)msg + sizeof(*msg);
+		qdf_mem_copy(msg->data, buf, len);
+
+		status = cds_send_mb_message_to_mac(msg);
+	}
+	return status;
 }
+
+QDF_STATUS sme_send_mgmt_tx(tHalHandle hal, uint8_t session_id,
+			   const uint8_t *buf, uint32_t len)
+{
+	QDF_STATUS status = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac = PMAC_STRUCT(hal);
+
+	MTRACE(qdf_trace(QDF_MODULE_ID_SME,
+			 TRACE_CODE_SME_RX_HDD_SEND_MGMT_TX, session_id, 0));
+
+	status = sme_acquire_global_lock(&mac->sme);
+	if (QDF_IS_STATUS_SUCCESS(status)) {
+		status = sme_prepare_mgmt_tx(hal, session_id, buf, len);
+		sme_release_global_lock(&mac->sme);
+	}
+
+	return status;
+}
+
+#ifdef WLAN_FEATURE_SAE
+QDF_STATUS sme_handle_sae_msg(tHalHandle hal, uint8_t session_id,
+		uint8_t sae_status)
+{
+	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
+	tpAniSirGlobal mac = PMAC_STRUCT(hal);
+	struct sir_sae_msg *sae_msg;
+
+	qdf_status = sme_acquire_global_lock(&mac->sme);
+	if (QDF_IS_STATUS_SUCCESS(qdf_status)) {
+		sae_msg = qdf_mem_malloc(sizeof(*sae_msg));
+		if (!sae_msg) {
+			qdf_status = QDF_STATUS_E_NOMEM;
+			sme_err("SAE: memory allocation failed");
+		} else {
+			sae_msg->message_type = eWNI_SME_SEND_SAE_MSG;
+			sae_msg->length = sizeof(*sae_msg);
+			sae_msg->session_id = session_id;
+			sae_msg->sae_status = sae_status;
+			sme_debug("SAE: sae_status %d session_id %d",
+				sae_msg->sae_status,
+				sae_msg->session_id);
+
+			qdf_status = cds_send_mb_message_to_mac(sae_msg);
+		}
+		sme_release_global_lock(&mac->sme);
+	}
+
+	return qdf_status;
+}
+#endif
