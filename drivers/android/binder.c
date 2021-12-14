@@ -163,6 +163,9 @@ static int binder_set_stop_on_user_error(const char *val,
 module_param_call(stop_on_user_error, binder_set_stop_on_user_error,
 	param_get_int, &binder_stop_on_user_error, S_IWUSR | S_IRUGO);
 
+static bool binder_global_pid_lookups = true;
+module_param_named(global_pid_lookups, binder_global_pid_lookups, bool, S_IRUGO);
+
 #define binder_debug(mask, x...) \
 	do { \
 		if (binder_debug_mask & mask) \
@@ -4317,6 +4320,9 @@ retry:
 
 			tr.sender_pid = task_tgid_nr_ns(sender,
 							task_active_pid_ns(current));
+
+			if (binder_global_pid_lookups && tr.sender_pid == 0)
+				tr.sender_pid = task_tgid_nr(sender);
 		} else {
 			tr.sender_pid = 0;
 		}
