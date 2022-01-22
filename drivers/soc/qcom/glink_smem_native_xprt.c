@@ -1268,7 +1268,7 @@ static void rx_worker(struct kthread_work *work)
 irqreturn_t irq_handler(int irq, void *priv)
 {
 	struct edge_info *einfo = (struct edge_info *)priv;
-	if (wakeup_time > 0)
+	if (einfo->wakeup_time > 0)
 		__pm_wakeup_event(&einfo->wakeup, einfo->wakeup_time);
 
 	if (einfo->rx_reset_reg)
@@ -2412,7 +2412,7 @@ static int glink_smem_native_probe(struct platform_device *pdev)
 	const char *subsys_name;
 	uint32_t irq_line;
 	uint32_t irq_mask;
-	uint32_t wakup_time;
+	uint32_t wakeup_time;
 	struct resource *r;
 	u32 *cpu_array;
 	char log_name[GLINK_NAME_SIZE*2+7] = {0};
@@ -2465,7 +2465,7 @@ static int glink_smem_native_probe(struct platform_device *pdev)
 	einfo->remote_proc_id = subsys_name_to_id(subsys_name);
 
 	key = "qcom,irq-wakeup-timer";
-	rc = of_property_read_u32(node, key, &wakup_time);
+	rc = of_property_read_u32(node, key, &wakeup_time);
 	if (rc) {
 		wakeup_time = 0;
 	}
