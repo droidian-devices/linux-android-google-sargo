@@ -233,6 +233,7 @@ struct edge_info {
 	unsigned long *ramp_time_us;
 	struct mailbox_config_info *mailbox;
 	void *log_ctx;
+	uint32_t wakeup_time;
 	struct wakeup_source wakeup;
 };
 
@@ -1267,7 +1268,8 @@ static void rx_worker(struct kthread_work *work)
 irqreturn_t irq_handler(int irq, void *priv)
 {
 	struct edge_info *einfo = (struct edge_info *)priv;
-	__pm_wakeup_event(&einfo->wakeup, 1000);
+	if (wakeup_time > 0)
+		__pm_wakeup_event(&einfo->wakeup, einfo->wakeup_time);
 
 	if (einfo->rx_reset_reg)
 		writel_relaxed(einfo->out_irq_mask, einfo->rx_reset_reg);
@@ -2410,6 +2412,7 @@ static int glink_smem_native_probe(struct platform_device *pdev)
 	const char *subsys_name;
 	uint32_t irq_line;
 	uint32_t irq_mask;
+	uint32_t wakup_time;
 	struct resource *r;
 	u32 *cpu_array;
 	char log_name[GLINK_NAME_SIZE*2+7] = {0};
@@ -2460,6 +2463,13 @@ static int glink_smem_native_probe(struct platform_device *pdev)
 		goto invalid_key;
 	}
 	einfo->remote_proc_id = subsys_name_to_id(subsys_name);
+
+	key = "qcom,irq-wakeup-timer";
+	rc = of_property_read_u32(node, key, &wakup_time);
+	if (rc) {
+		wakeup_time = 0;
+	}
+	einfo->wakeup_time = wakeup_time;
 	wakeup_source_init(&einfo->wakeup, "glink_smem_native_xprt");
 
 	init_xprt_cfg(einfo, subsys_name);
