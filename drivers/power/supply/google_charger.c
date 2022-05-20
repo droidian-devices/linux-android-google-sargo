@@ -267,6 +267,7 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	PSY_SET_PROP(chg_drv->chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, 1);
 }
 
+#if 0
 static void pr_info_states(struct power_supply *chg_psy,
 			   struct power_supply *usb_psy,
 			   struct power_supply *wlc_psy,
@@ -305,6 +306,7 @@ static void pr_info_states(struct power_supply *chg_psy,
 				     POWER_SUPPLY_PROP_CURRENT_MAX) / 1000,
 			PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_TEMP));
 }
+#endif
 
 /* returns 1 if charging should be disabled given the current battery capacity
  * given in percent, return 0 if charging should happen
@@ -905,10 +907,12 @@ static void chg_work(struct work_struct *work)
 	    usb_present == -EINVAL || wlc_online == -EINVAL)
 		goto error_rerun;
 
+#if 0
 	pr_info_states(chg_psy, usb_psy, wlc_psy,
 		       temp, ibatt, vbatt, vchrg,
 		       chg_type, chg_drv->fv_uv,
 		       soc, usb_present, wlc_online);
+#endif
 
 	if (temp < profile->temp_limits[0] ||
 	    temp > profile->temp_limits[profile->temp_nb_limits - 1]) {
