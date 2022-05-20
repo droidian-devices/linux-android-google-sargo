@@ -194,6 +194,7 @@ static int psy_changed(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+#if 0
 static char *psy_chgt_str[] = {
 	"Unknown", "N/A", "Trickle", "Fast", "Taper"
 };
@@ -204,6 +205,7 @@ static char *psy_usb_type_str[] = {
 	"Wireless", "USB_FLOAT", "BMS", "Parallel", "Main", "Wipower",
 	"TYPEC", "TYPEC_UFP", "TYPEC_DFP"
 };
+#endif
 
 #define PSY_GET_PROP(psy, psp) psy_get_prop(psy, psp, #psp)
 static inline int psy_get_prop(struct power_supply *psy,
