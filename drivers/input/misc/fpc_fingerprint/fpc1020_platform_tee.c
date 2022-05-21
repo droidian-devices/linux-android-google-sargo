@@ -426,8 +426,10 @@ static ssize_t wakeup_enable_set(struct device *dev,
 	mutex_lock(&fpc1020->lock);
 	if (!strncmp(buf, "enable", strlen("enable"))) {
 		atomic_set(&fpc1020->wakeup_enabled, 1);
+		enable_irq_wake(gpio_to_irq(fpc1020->irq_gpio));
 	} else if (!strncmp(buf, "disable", strlen("disable"))) {
 		atomic_set(&fpc1020->wakeup_enabled, 0);
+		disable_irq_wake(gpio_to_irq(fpc1020->irq_gpio));
 	} else {
 		ret = -EINVAL;
 	}
