@@ -26,6 +26,8 @@
 		pinctrl-0 = <&fpc_reset_low>;
 		pinctrl-1 = <&fpc_reset_high>;
 		pinctrl-2 = <&fpc_irq_default>;
+
+		fpc,enable-on-boot;
 	};
 } ;
 
