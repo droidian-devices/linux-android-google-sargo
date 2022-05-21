@@ -23,6 +23,9 @@
 #include <linux/delay.h>
 #include <linux/qpnp/qpnp-revid.h>
 #include <linux/power_supply.h>
+#include <linux/kthread.h>
+#include <linux/completion.h>
+#include <linux/cpu.h>
 
 #define FG_ADC_RR_EN_CTL			0x46
 #define FG_ADC_RR_SKIN_TEMP_LSB			0x50
@@ -196,7 +199,7 @@
 #define FG_RR_ADC_STS_CHANNEL_STS		0x2
 
 #define FG_RR_CONV_CONTINUOUS_TIME_MIN_MS	50
-#define FG_RR_CONV_MAX_RETRY_CNT		50
+#define FG_RR_CONV_MAX_RETRY_CNT		10
 #define FG_RR_TP_REV_VERSION1		21
 #define FG_RR_TP_REV_VERSION2		29
 #define FG_RR_TP_REV_VERSION3		32
@@ -227,8 +230,10 @@ enum rradc_channel_id {
 };
 
 struct rradc_cache {
-	u16 value;
+	u8 value[6];
 	struct timespec ts;
+	bool initial;
+	struct completion cache_fill_done;
 };
 
 struct rradc_chip {
@@ -244,6 +249,8 @@ struct rradc_chip {
 	int volt;
 	struct power_supply		*usb_trig;
 	struct rradc_cache              usbin_v;
+	struct rradc_cache              batid_v;
+	struct task_struct *readthread;
 };
 
 struct rradc_channels {
@@ -797,16 +804,18 @@ static int rradc_check_status_ready_with_retry(struct rradc_chip *chip,
 	return rc;
 }
 
-static int rradc_read_channel_with_continuous_mode(struct rradc_chip *chip,
-			struct rradc_chan_prop *prop, u8 *buf)
+static int _rradc_read_channel(struct rradc_chip *chip,
+			struct rradc_chan_prop *prop, u8 *buf, bool continuous)
 {
 	int rc = 0, ret = 0;
 	u16 status = 0;
 
-	rc = rradc_enable_continuous_mode(chip);
-	if (rc < 0) {
-		pr_err("Failed to switch to continuous mode\n");
-		return rc;
+	if (continuous) {
+		rc = rradc_enable_continuous_mode(chip);
+		if (rc < 0) {
+			pr_err("Failed to switch to continuous mode\n");
+			return rc;
+		}
 	}
 
 	status = rradc_chans[prop->channel].sts;
@@ -825,13 +834,27 @@ static int rradc_read_channel_with_continuous_mode(struct rradc_chip *chip,
 	}
 
 disable:
-	rc = rradc_disable_continuous_mode(chip);
-	if (rc < 0) {
-		pr_err("Failed to switch to non continuous mode\n");
-		ret = rc;
+	if (continuous) {
+		rc = rradc_disable_continuous_mode(chip);
+		if (rc < 0) {
+			pr_err("Failed to switch to non continuous mode\n");
+			ret = rc;
+		}
 	}
 
 	return ret;
+}
+
+static int rradc_read_channel_with_continuous_mode(struct rradc_chip *chip,
+			struct rradc_chan_prop *prop, u8 *buf)
+{
+	return _rradc_read_channel(chip, prop, buf, true);
+}
+
+static int rradc_read_channel(struct rradc_chip *chip,
+			struct rradc_chan_prop *prop, u8 *buf)
+{
+	return _rradc_read_channel(chip, prop, buf, false);
 }
 
 static int rradc_enable_batt_id_channel(struct rradc_chip *chip, bool enable)
@@ -881,9 +904,9 @@ static int rradc_do_batt_id_conversion(struct rradc_chip *chip,
 		return ret;
 	}
 
-	rc = rradc_read_channel_with_continuous_mode(chip, prop, buf);
+	rc = rradc_read_channel(chip, prop, buf);
 	if (rc < 0) {
-		pr_err("Error reading in continuous mode:%d\n", rc);
+		pr_err("Error reading:%d\n", rc);
 		ret = rc;
 	}
 
@@ -903,29 +926,46 @@ static int rradc_do_batt_id_conversion(struct rradc_chip *chip,
 	return ret;
 }
 
-static void rradc_update_cache(struct rradc_cache *cache, u16 value)
+static void rradc_update_cache(struct rradc_cache *cache, u8* value)
 {
-	cache->value = value;
+	int i;
+	for (i = 0; i < 6; i++) {
+		cache->value[i] = value[i];
+	}
+	cache->initial = false;
 	getboottime(&cache->ts);
+	complete(&cache->cache_fill_done);
 }
 
-static int rradc_check_cache(struct rradc_cache *cache, u16 *value)
+static int rradc_check_cache(struct rradc_cache *cache, u8 *value)
 {
 	struct timespec ts, diff;
 	s64 delay;
-
-	if (cache->ts.tv_sec == 0 && cache->ts.tv_nsec == 0)
-		return -ENODATA;
+	int rc, i;
 
 	getboottime(&ts);
 	diff = timespec_sub(ts, cache->ts);
 	delay = timespec_to_ns(&diff);
-	if (delay < NSEC_PER_SEC*2) {
-		*value = cache->value;
-		return 0;
+
+	/* Don't waste time reporting V BUS on boot */
+	if (delay < NSEC_PER_SEC*2 || cache->initial) {
+		pr_debug("cache is not current, using value anyway");
+		reinit_completion(&cache->cache_fill_done);
+		rc = -ENODATA;
 	}
 
-	return -ENODATA;
+	for (i = 0; i < 6; i++) {
+		value[i] = cache->value[i];
+	}
+	return 0;
+}
+
+static void rradc_kick_read_thread(struct rradc_chip *chip)
+{
+	get_online_cpus();
+	kthread_unpark(chip->readthread);
+	wake_up_process(chip->readthread);
+	put_online_cpus();
 }
 
 static int rradc_do_conversion(struct rradc_chip *chip,
@@ -933,51 +973,30 @@ static int rradc_do_conversion(struct rradc_chip *chip,
 {
 	int rc = 0, bytes_to_read = 0;
 	u8 buf[6];
-	u16 offset = 0, batt_id_5 = 0, batt_id_15 = 0, batt_id_150 = 0;
+	u16 batt_id_5 = 0, batt_id_15 = 0, batt_id_150 = 0, offset = 0;
 	u16 status = 0;
 
 	mutex_lock(&chip->lock);
 
 	switch (prop->channel) {
 	case RR_ADC_BATT_ID:
-		rc = rradc_do_batt_id_conversion(chip, prop, data, buf);
 		if (rc < 0) {
-			pr_err("Battery ID conversion failed:%d\n", rc);
-			goto fail;
+			rc = 0;
+			rradc_kick_read_thread(chip);
+			wait_for_completion_timeout(&chip->batid_v.cache_fill_done, 1000);
+			rc = rradc_check_cache(&chip->batid_v, buf);
 		}
+		goto done;
 		break;
 	case RR_ADC_USBIN_V:
-		/* Don't waste time reporting V BUS on boot */
-		if (ktime_get_seconds() <= 3) {
-			rc = -EAGAIN;
-			goto fail;
-		}
-		if (rradc_check_cache(&chip->usbin_v, data) == 0) {
+		rc = rradc_check_cache(&chip->usbin_v, buf);
+		if (rc < 0) {
 			rc = 0;
-			goto fail;
+			rradc_kick_read_thread(chip);
+			wait_for_completion_timeout(&chip->usbin_v.cache_fill_done, 1000);
+			rc = rradc_check_cache(&chip->batid_v, buf);
 		}
-		/* Force conversion every cycle */
-		rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
-				FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK,
-				FG_ADC_RR_USB_IN_V_EVERY_CYCLE);
-		if (rc < 0) {
-			pr_err("Force every cycle update failed:%d\n", rc);
-			goto fail;
-		}
-
-		rc = rradc_read_channel_with_continuous_mode(chip, prop, buf);
-		if (rc < 0) {
-			pr_err("Error reading in continuous mode:%d\n", rc);
-			goto fail;
-		}
-
-		/* Restore usb_in trigger */
-		rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
-				FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK, 0);
-		if (rc < 0) {
-			pr_err("Restore every cycle update failed:%d\n", rc);
-			goto fail;
-		}
+		goto done;
 		break;
 	case RR_ADC_CHG_HOT_TEMP:
 	case RR_ADC_CHG_TOO_HOT_TEMP:
@@ -1021,6 +1040,7 @@ static int rradc_do_conversion(struct rradc_chip *chip,
 		goto fail;
 	}
 
+done:
 	if (prop->channel == RR_ADC_BATT_ID) {
 		batt_id_150 = (buf[5] << 8) | buf[4];
 		batt_id_15 = (buf[3] << 8) | buf[2];
@@ -1052,9 +1072,6 @@ static int rradc_do_conversion(struct rradc_chip *chip,
 	} else {
 		*data = (buf[1] << 8) | buf[0];
 	}
-
-	if (prop->channel == RR_ADC_USBIN_V)
-		rradc_update_cache(&chip->usbin_v, *data);
 
 fail:
 	mutex_unlock(&chip->lock);
@@ -1194,6 +1211,69 @@ static int rradc_get_dt_data(struct rradc_chip *chip, struct device_node *node)
 	return 0;
 }
 
+static int rradc_thread(void* data) {
+	struct rradc_chip* chip = (struct rradc_chip*)data;
+	struct rradc_chan_prop *prop;
+	u8 buf[6];
+	int rc, attempts = 0;
+	const int delayms = 3000;
+	const int max_attempts = 3;
+
+	/* If this thread fails to extract meaningful data the RRADC is probably dead. */
+retry:
+	++attempts;
+
+	/* Force conversion every cycle */
+	mutex_lock(&chip->lock);
+	rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
+			FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK,
+			FG_ADC_RR_USB_IN_V_EVERY_CYCLE);
+	if (rc < 0) {
+		pr_err("Force every cycle update failed:%d\n", rc);
+		goto try_batt_id;
+	}
+
+	prop = &chip->chan_props[RR_ADC_USBIN_V];
+	rc = rradc_read_channel_with_continuous_mode(chip, prop, buf);
+	if (rc < 0) {
+		pr_err("Error reading in continuous mode:%d\n", rc);
+		goto try_batt_id;
+	}
+
+	/* Restore usb_in trigger */
+	rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
+			FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK, 0);
+	if (rc < 0) {
+		pr_err("Restore every cycle update failed:%d\n", rc);
+		goto try_batt_id;
+	}
+
+	/* USB_V successful */
+	rradc_update_cache(&chip->usbin_v, buf);
+
+try_batt_id:
+	prop = &chip->chan_props[RR_ADC_BATT_ID];
+	rc = rradc_do_batt_id_conversion(chip, prop, data, buf);
+	if (rc < 0) {
+		pr_err("Battery ID conversion failed:%d\n", rc);
+		goto iterated;
+	}
+
+	/* BATT_ID successful */
+	rradc_update_cache(&chip->batid_v, buf);
+
+iterated:
+	mutex_unlock(&chip->lock);
+
+	if (rc < 0 && attempts < max_attempts) {
+		msleep(delayms);
+		goto retry;
+	}
+
+	kthread_parkme();
+	return 0;
+}
+
 static int rradc_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
@@ -1230,6 +1310,16 @@ static int rradc_probe(struct platform_device *pdev)
 
 	chip->usbin_v.ts.tv_sec = 0;
 	chip->usbin_v.ts.tv_nsec = 0;
+	chip->usbin_v.initial = true;
+	init_completion(&chip->usbin_v.cache_fill_done);
+
+	chip->batid_v.ts.tv_sec = 0;
+	chip->batid_v.ts.tv_nsec = 0;
+	chip->batid_v.initial = true;
+	init_completion(&chip->batid_v.cache_fill_done);
+
+	chip->readthread = kthread_create(rradc_thread,
+		(void*)chip, "rradc");
 
 	chip->usb_trig = power_supply_get_by_name("usb");
 	if (!chip->usb_trig)
@@ -1241,7 +1331,11 @@ static int rradc_probe(struct platform_device *pdev)
 	if (rc < 0)
 		pr_err("Failed to set FG_ADC_RR_AUX_THERM_EVERY_CYCLE");
 
-	return devm_iio_device_register(dev, indio_dev);
+	rc = devm_iio_device_register(dev, indio_dev);
+	if (!rc)
+		wake_up_process(chip->readthread);
+
+	return rc;
 }
 
 static const struct of_device_id rradc_match_table[] = {
