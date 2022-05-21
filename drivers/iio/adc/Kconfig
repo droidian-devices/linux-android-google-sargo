@@ -420,6 +420,8 @@ config QCOM_TADC
 config QCOM_RRADC
 	tristate "Qualcomm Technologies Inc. PMIC Round robin ADC"
 	depends on SPMI
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
 	select REGMAP_SPMI
 	help
 	  This is the PMIC Round Robin ADC driver.

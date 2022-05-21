@@ -23,9 +23,14 @@
 #include <linux/delay.h>
 #include <linux/qpnp/qpnp-revid.h>
 #include <linux/power_supply.h>
-#include <linux/kthread.h>
-#include <linux/completion.h>
-#include <linux/cpu.h>
+#include <linux/slab.h>
+
+#include <linux/iio/iio.h>
+#include <linux/iio/buffer.h>
+#include <linux/iio/events.h>
+#include <linux/iio/trigger.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 
 #define FG_ADC_RR_EN_CTL			0x46
 #define FG_ADC_RR_SKIN_TEMP_LSB			0x50
@@ -199,7 +204,7 @@
 #define FG_RR_ADC_STS_CHANNEL_STS		0x2
 
 #define FG_RR_CONV_CONTINUOUS_TIME_MIN_MS	50
-#define FG_RR_CONV_MAX_RETRY_CNT		10
+#define FG_RR_CONV_MAX_RETRY_CNT		50
 #define FG_RR_TP_REV_VERSION1		21
 #define FG_RR_TP_REV_VERSION2		29
 #define FG_RR_TP_REV_VERSION3		32
@@ -229,13 +234,6 @@ enum rradc_channel_id {
 	RR_ADC_MAX
 };
 
-struct rradc_cache {
-	u8 value[6];
-	struct timespec ts;
-	bool initial;
-	struct completion cache_fill_done;
-};
-
 struct rradc_chip {
 	struct device			*dev;
 	struct mutex			lock;
@@ -248,9 +246,7 @@ struct rradc_chip {
 	struct pmic_revid_data		*pmic_fab_id;
 	int volt;
 	struct power_supply		*usb_trig;
-	struct rradc_cache              usbin_v;
-	struct rradc_cache              batid_v;
-	struct task_struct *readthread;
+	u8 *buffer;
 };
 
 struct rradc_channels {
@@ -260,6 +256,7 @@ struct rradc_channels {
 	u8				lsb;
 	u8				msb;
 	u8				sts;
+	int				scan_index;
 	int (*scale)(struct rradc_chip *chip, struct rradc_chan_prop *prop,
 					u16 adc_code, int *result);
 };
@@ -611,7 +608,7 @@ static int rradc_post_process_gpio(struct rradc_chip *chip,
 	return 0;
 }
 
-#define RR_ADC_CHAN(_dname, _type, _mask, _scale, _lsb, _msb, _sts)	\
+#define RR_ADC_CHAN(_dname, _type, _mask, _scale, _lsb, _msb, _sts, _scan_index)	\
 	{								\
 		.datasheet_name = (_dname),				\
 		.type = _type,						\
@@ -620,79 +617,80 @@ static int rradc_post_process_gpio(struct rradc_chip *chip,
 		.lsb = _lsb,						\
 		.msb = _msb,						\
 		.sts = _sts,						\
+		.scan_index = _scan_index			\
 	},								\
 
-#define RR_ADC_CHAN_TEMP(_dname, _scale, mask, _lsb, _msb, _sts)	\
+#define RR_ADC_CHAN_TEMP(_dname, _scale, mask, _lsb, _msb, _sts, _scan_index)	\
 	RR_ADC_CHAN(_dname, IIO_TEMP,					\
 		mask,							\
-		_scale, _lsb, _msb, _sts)				\
+		_scale, _lsb, _msb, _sts, _scan_index)				\
 
-#define RR_ADC_CHAN_VOLT(_dname, _scale, _lsb, _msb, _sts)		\
+#define RR_ADC_CHAN_VOLT(_dname, _scale, _lsb, _msb, _sts, _scan_index)		\
 	RR_ADC_CHAN(_dname, IIO_VOLTAGE,				\
 		  BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),\
-		  _scale, _lsb, _msb, _sts)				\
+		  _scale, _lsb, _msb, _sts, _scan_index)				\
 
-#define RR_ADC_CHAN_CURRENT(_dname, _scale, _lsb, _msb, _sts)		\
+#define RR_ADC_CHAN_CURRENT(_dname, _scale, _lsb, _msb, _sts, _scan_index)		\
 	RR_ADC_CHAN(_dname, IIO_CURRENT,				\
 		  BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),\
-		  _scale, _lsb, _msb, _sts)				\
+		  _scale, _lsb, _msb, _sts, _scan_index)				\
 
-#define RR_ADC_CHAN_RESISTANCE(_dname, _scale, _lsb, _msb, _sts)	\
+#define RR_ADC_CHAN_RESISTANCE(_dname, _scale, _lsb, _msb, _sts, _scan_index)	\
 	RR_ADC_CHAN(_dname, IIO_RESISTANCE,				\
 		  BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),\
-		  _scale, _lsb, _msb, _sts)				\
+		  _scale, _lsb, _msb, _sts, _scan_index)				\
 
 static const struct rradc_channels rradc_chans[] = {
 	RR_ADC_CHAN_RESISTANCE("batt_id", rradc_post_process_batt_id,
 			FG_ADC_RR_BATT_ID_5_LSB, FG_ADC_RR_BATT_ID_5_MSB,
-			FG_ADC_RR_BATT_ID_STS)
+			FG_ADC_RR_BATT_ID_STS, 0)
 	RR_ADC_CHAN_TEMP("batt_therm", &rradc_post_process_therm,
 			BIT(IIO_CHAN_INFO_RAW),
 			FG_ADC_RR_BATT_THERM_LSB, FG_ADC_RR_BATT_THERM_MSB,
-			FG_ADC_RR_BATT_THERM_STS)
+			FG_ADC_RR_BATT_THERM_STS, 1)
 	RR_ADC_CHAN_TEMP("skin_temp", &rradc_post_process_therm,
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),
 			FG_ADC_RR_SKIN_TEMP_LSB, FG_ADC_RR_SKIN_TEMP_MSB,
-			FG_ADC_RR_AUX_THERM_STS)
+			FG_ADC_RR_AUX_THERM_STS, 2)
 	RR_ADC_CHAN_CURRENT("usbin_i", &rradc_post_process_usbin_curr,
 			FG_ADC_RR_USB_IN_I_LSB, FG_ADC_RR_USB_IN_I_MSB,
-			FG_ADC_RR_USB_IN_I_STS)
+			FG_ADC_RR_USB_IN_I_STS, 3)
 	RR_ADC_CHAN_VOLT("usbin_v", &rradc_post_process_volt,
 			FG_ADC_RR_USB_IN_V_LSB, FG_ADC_RR_USB_IN_V_MSB,
-			FG_ADC_RR_USB_IN_V_STS)
+			FG_ADC_RR_USB_IN_V_STS, 4)
 	RR_ADC_CHAN_CURRENT("dcin_i", &rradc_post_process_dcin_curr,
 			FG_ADC_RR_DC_IN_I_LSB, FG_ADC_RR_DC_IN_I_MSB,
-			FG_ADC_RR_DC_IN_I_STS)
+			FG_ADC_RR_DC_IN_I_STS, 5)
 	RR_ADC_CHAN_VOLT("dcin_v", &rradc_post_process_volt,
 			FG_ADC_RR_DC_IN_V_LSB, FG_ADC_RR_DC_IN_V_MSB,
-			FG_ADC_RR_DC_IN_V_STS)
+			FG_ADC_RR_DC_IN_V_STS, 6)
 	RR_ADC_CHAN_TEMP("die_temp", &rradc_post_process_die_temp,
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),
 			FG_ADC_RR_PMI_DIE_TEMP_LSB, FG_ADC_RR_PMI_DIE_TEMP_MSB,
-			FG_ADC_RR_PMI_DIE_TEMP_STS)
+			FG_ADC_RR_PMI_DIE_TEMP_STS, 7)
 	RR_ADC_CHAN_TEMP("chg_temp", &rradc_post_process_chg_temp,
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),
 			FG_ADC_RR_CHARGER_TEMP_LSB, FG_ADC_RR_CHARGER_TEMP_MSB,
-			FG_ADC_RR_CHARGER_TEMP_STS)
+			FG_ADC_RR_CHARGER_TEMP_STS, 8)
 	RR_ADC_CHAN_VOLT("gpio", &rradc_post_process_gpio,
 			FG_ADC_RR_GPIO_LSB, FG_ADC_RR_GPIO_MSB,
-			FG_ADC_RR_GPIO_STS)
+			FG_ADC_RR_GPIO_STS, 9)
 	RR_ADC_CHAN_TEMP("chg_temp_hot", &rradc_post_process_chg_temp_hot,
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),
 			FG_ADC_RR_CHARGER_HOT, FG_ADC_RR_CHARGER_HOT,
-			FG_ADC_RR_CHARGER_TEMP_STS)
+			FG_ADC_RR_CHARGER_TEMP_STS, 10)
 	RR_ADC_CHAN_TEMP("chg_temp_too_hot", &rradc_post_process_chg_temp_hot,
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),
 			FG_ADC_RR_CHARGER_TOO_HOT, FG_ADC_RR_CHARGER_TOO_HOT,
-			FG_ADC_RR_CHARGER_TEMP_STS)
+			FG_ADC_RR_CHARGER_TEMP_STS, 11)
 	RR_ADC_CHAN_TEMP("skin_temp_hot", &rradc_post_process_skin_temp_hot,
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),
 			FG_ADC_RR_SKIN_HOT, FG_ADC_RR_SKIN_HOT,
-			FG_ADC_RR_AUX_THERM_STS)
+			FG_ADC_RR_AUX_THERM_STS, 12)
 	RR_ADC_CHAN_TEMP("skin_temp_too_hot", &rradc_post_process_skin_temp_hot,
 			BIT(IIO_CHAN_INFO_RAW) | BIT(IIO_CHAN_INFO_PROCESSED),
 			FG_ADC_RR_SKIN_TOO_HOT, FG_ADC_RR_SKIN_TOO_HOT,
-			FG_ADC_RR_AUX_THERM_STS)
+			FG_ADC_RR_AUX_THERM_STS, 13)
 };
 
 static int rradc_enable_continuous_mode(struct rradc_chip *chip)
@@ -926,48 +924,6 @@ static int rradc_do_batt_id_conversion(struct rradc_chip *chip,
 	return ret;
 }
 
-static void rradc_update_cache(struct rradc_cache *cache, u8* value)
-{
-	int i;
-	for (i = 0; i < 6; i++) {
-		cache->value[i] = value[i];
-	}
-	cache->initial = false;
-	getboottime(&cache->ts);
-	complete(&cache->cache_fill_done);
-}
-
-static int rradc_check_cache(struct rradc_cache *cache, u8 *value)
-{
-	struct timespec ts, diff;
-	s64 delay;
-	int rc, i;
-
-	getboottime(&ts);
-	diff = timespec_sub(ts, cache->ts);
-	delay = timespec_to_ns(&diff);
-
-	/* Don't waste time reporting V BUS on boot */
-	if (delay < NSEC_PER_SEC*2 || cache->initial) {
-		pr_debug("cache is not current, using value anyway");
-		reinit_completion(&cache->cache_fill_done);
-		rc = -ENODATA;
-	}
-
-	for (i = 0; i < 6; i++) {
-		value[i] = cache->value[i];
-	}
-	return 0;
-}
-
-static void rradc_kick_read_thread(struct rradc_chip *chip)
-{
-	get_online_cpus();
-	kthread_unpark(chip->readthread);
-	wake_up_process(chip->readthread);
-	put_online_cpus();
-}
-
 static int rradc_do_conversion(struct rradc_chip *chip,
 			struct rradc_chan_prop *prop, u16 *data)
 {
@@ -980,22 +936,38 @@ static int rradc_do_conversion(struct rradc_chip *chip,
 
 	switch (prop->channel) {
 	case RR_ADC_BATT_ID:
+		prop = &chip->chan_props[RR_ADC_BATT_ID];
+		rc = rradc_do_batt_id_conversion(chip, prop, data, buf);
 		if (rc < 0) {
-			rc = 0;
-			rradc_kick_read_thread(chip);
-			wait_for_completion_timeout(&chip->batid_v.cache_fill_done, 1000);
-			rc = rradc_check_cache(&chip->batid_v, buf);
+			pr_err("Battery ID conversion failed:%d\n", rc);
+			goto fail;
 		}
 		goto done;
 		break;
 	case RR_ADC_USBIN_V:
-		rc = rradc_check_cache(&chip->usbin_v, buf);
+		rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
+				FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK,
+				FG_ADC_RR_USB_IN_V_EVERY_CYCLE);
 		if (rc < 0) {
-			rc = 0;
-			rradc_kick_read_thread(chip);
-			wait_for_completion_timeout(&chip->usbin_v.cache_fill_done, 1000);
-			rc = rradc_check_cache(&chip->batid_v, buf);
+			pr_err("Force every cycle update failed:%d\n", rc);
+			goto fail;
 		}
+
+		prop = &chip->chan_props[RR_ADC_USBIN_V];
+		rc = rradc_read_channel_with_continuous_mode(chip, prop, buf);
+		if (rc < 0) {
+			pr_err("Error reading in continuous mode:%d\n", rc);
+			goto fail;
+		}
+
+		/* Restore usb_in trigger */
+		rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
+				FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK, 0);
+		if (rc < 0) {
+			pr_err("Restore every cycle update failed:%d\n", rc);
+			goto fail;
+		}
+
 		goto done;
 		break;
 	case RR_ADC_CHG_HOT_TEMP:
@@ -1079,7 +1051,7 @@ fail:
 	return rc;
 }
 
-static int rradc_read_raw(struct iio_dev *indio_dev,
+static int rradc_get_val(struct iio_dev *indio_dev,
 			 struct iio_chan_spec const *chan, int *val, int *val2,
 			 long mask)
 {
@@ -1135,8 +1107,34 @@ static int rradc_read_raw(struct iio_dev *indio_dev,
 	return rc;
 }
 
+static int rradc_update_scan_mode(struct iio_dev *indio_dev,
+				   const unsigned long *scan_mask)
+{
+	struct rradc_chip *chip = iio_priv(indio_dev);
+
+	mutex_lock(&chip->lock);
+	kfree(chip->buffer);
+	chip->buffer = kzalloc(indio_dev->scan_bytes, GFP_KERNEL);
+	mutex_unlock(&chip->lock);
+
+	if (chip->buffer == NULL)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static int rradc_read_raw(struct iio_dev *indio_dev,
+			 struct iio_chan_spec const *chan, int *val, int *val2,
+			 long mask)
+{
+	if (iio_buffer_enabled(indio_dev))
+		return -EBUSY;
+	return rradc_get_val(indio_dev, chan, val, val2, mask);
+}
+
 static const struct iio_info rradc_info = {
 	.read_raw	= &rradc_read_raw,
+	.update_scan_mode = &rradc_update_scan_mode,
 	.driver_module	= THIS_MODULE,
 };
 
@@ -1205,74 +1203,58 @@ static int rradc_get_dt_data(struct rradc_chip *chip, struct device_node *node)
 		iio_chan->info_mask_separate = rradc_chan->info_mask;
 		iio_chan->type = rradc_chan->type;
 		iio_chan->address = i;
+		iio_chan->scan_index = rradc_chan->scan_index;
 		iio_chan++;
 	}
 
 	return 0;
 }
 
-static int rradc_thread(void* data) {
-	struct rradc_chip* chip = (struct rradc_chip*)data;
-	struct rradc_chan_prop *prop;
-	u8 buf[6];
-	int rc, attempts = 0;
-	const int delayms = 3000;
-	const int max_attempts = 3;
+irqreturn_t rradc_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = (struct iio_dev *)pf->indio_dev;
+	struct rradc_chip* chip = (struct rradc_chip*)iio_priv(indio_dev);
+	int i = 0, bit, rc, val = 0;
 
-	/* If this thread fails to extract meaningful data the RRADC is probably dead. */
-retry:
-	++attempts;
+	pr_err("");
 
-	/* Force conversion every cycle */
 	mutex_lock(&chip->lock);
-	rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
-			FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK,
-			FG_ADC_RR_USB_IN_V_EVERY_CYCLE);
-	if (rc < 0) {
-		pr_err("Force every cycle update failed:%d\n", rc);
-		goto try_batt_id;
+	for_each_set_bit(bit, indio_dev->active_scan_mask, indio_dev->masklength) {
+		rc = rradc_get_val(indio_dev, &indio_dev->channels[bit],
+					    &val, NULL, IIO_CHAN_INFO_RAW);
+		if (rc < 0)
+			goto out;
+
+		chip->buffer[i++] = val;
 	}
 
-	prop = &chip->chan_props[RR_ADC_USBIN_V];
-	rc = rradc_read_channel_with_continuous_mode(chip, prop, buf);
-	if (rc < 0) {
-		pr_err("Error reading in continuous mode:%d\n", rc);
-		goto try_batt_id;
-	}
+	iio_push_to_buffers_with_timestamp(indio_dev, chip->buffer,
+					   iio_get_time_ns(indio_dev));
 
-	/* Restore usb_in trigger */
-	rc = rradc_masked_write(chip, FG_ADC_RR_USB_IN_V_TRIGGER,
-			FG_ADC_RR_USB_IN_V_EVERY_CYCLE_MASK, 0);
-	if (rc < 0) {
-		pr_err("Restore every cycle update failed:%d\n", rc);
-		goto try_batt_id;
-	}
-
-	/* USB_V successful */
-	rradc_update_cache(&chip->usbin_v, buf);
-
-try_batt_id:
-	prop = &chip->chan_props[RR_ADC_BATT_ID];
-	rc = rradc_do_batt_id_conversion(chip, prop, data, buf);
-	if (rc < 0) {
-		pr_err("Battery ID conversion failed:%d\n", rc);
-		goto iterated;
-	}
-
-	/* BATT_ID successful */
-	rradc_update_cache(&chip->batid_v, buf);
-
-iterated:
+out:
 	mutex_unlock(&chip->lock);
 
-	if (rc < 0 && attempts < max_attempts) {
-		msleep(delayms);
-		goto retry;
-	}
+	iio_trigger_notify_done(indio_dev->trig);
 
-	kthread_parkme();
-	return 0;
+	return IRQ_HANDLED;
 }
+
+irqreturn_t rradc_poll(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = pf->indio_dev;
+
+	pr_err("");
+	pf->timestamp = iio_get_time_ns(indio_dev);
+
+	return IRQ_WAKE_THREAD;
+}
+
+static const struct iio_buffer_setup_ops rradc_buffer_setup_ops = {
+	.postenable = iio_triggered_buffer_postenable,
+	.predisable = iio_triggered_buffer_predisable,
+};
 
 static int rradc_probe(struct platform_device *pdev)
 {
@@ -1308,19 +1290,6 @@ static int rradc_probe(struct platform_device *pdev)
 	indio_dev->channels = chip->iio_chans;
 	indio_dev->num_channels = chip->nchannels;
 
-	chip->usbin_v.ts.tv_sec = 0;
-	chip->usbin_v.ts.tv_nsec = 0;
-	chip->usbin_v.initial = true;
-	init_completion(&chip->usbin_v.cache_fill_done);
-
-	chip->batid_v.ts.tv_sec = 0;
-	chip->batid_v.ts.tv_nsec = 0;
-	chip->batid_v.initial = true;
-	init_completion(&chip->batid_v.cache_fill_done);
-
-	chip->readthread = kthread_create(rradc_thread,
-		(void*)chip, "rradc");
-
 	chip->usb_trig = power_supply_get_by_name("usb");
 	if (!chip->usb_trig)
 		pr_debug("Error obtaining usb power supply\n");
@@ -1331,10 +1300,25 @@ static int rradc_probe(struct platform_device *pdev)
 	if (rc < 0)
 		pr_err("Failed to set FG_ADC_RR_AUX_THERM_EVERY_CYCLE");
 
-	rc = devm_iio_device_register(dev, indio_dev);
-	if (!rc)
-		wake_up_process(chip->readthread);
+	rc = iio_triggered_buffer_setup(indio_dev, rradc_poll,
+						 rradc_trigger_handler,
+						 &rradc_buffer_setup_ops);
+	if (rc < 0) {
+		pr_err("Failed to set up triggered buffer for RRADC device");
+		goto exit;
+	}
 
+	rc = devm_iio_device_register(dev, indio_dev);
+	if (rc < 0) {
+		pr_err("Failed to register RRADC device");
+		goto cleanup;
+	}
+
+	goto exit;
+
+cleanup:
+	iio_triggered_buffer_cleanup(indio_dev);
+exit:
 	return rc;
 }
 
