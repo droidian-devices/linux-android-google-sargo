@@ -837,12 +837,14 @@ static void chg_work(struct work_struct *work)
 	if (chg_drv->plugged != plugged) {
 		int ret = 0;
 
+#if 0
 		/* only after boot */
 		if (chg_drv->plugged != -1) {
 			ret = PSY_SET_PROP(bat_psy,
 					   POWER_SUPPLY_PROP_BATT_CE_CTRL,
 					   plugged);
 		}
+#endif
 
 		if (ret == 0)
 			chg_drv->plugged = plugged;
