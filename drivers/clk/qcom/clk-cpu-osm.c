@@ -739,6 +739,9 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	unsigned int i, prev_cc = 0;
 	unsigned int xo_kHz;
 
+	if (policy->driver_data)
+		goto done;
+
 	c = osm_configure_policy(policy);
 	if (!c) {
 		pr_err("no clock for CPU%d\n", policy->cpu);
@@ -809,6 +812,8 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 	}
 
 	policy->driver_data = c;
+
+done:
 	return 0;
 
 err:
@@ -818,8 +823,6 @@ err:
 
 static int osm_cpufreq_cpu_exit(struct cpufreq_policy *policy)
 {
-	kfree(policy->freq_table);
-	policy->freq_table = NULL;
 	return 0;
 }
 
