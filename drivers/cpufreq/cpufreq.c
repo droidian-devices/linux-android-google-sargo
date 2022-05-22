@@ -220,6 +220,13 @@ struct cpufreq_policy *cpufreq_cpu_get_raw(unsigned int cpu)
 }
 EXPORT_SYMBOL_GPL(cpufreq_cpu_get_raw);
 
+static struct cpufreq_policy *cpufreq_cpu_get_related(unsigned int cpu)
+{
+        struct cpufreq_policy *policy = per_cpu(cpufreq_cpu_data, cpu);
+
+        return policy && cpumask_test_cpu(cpu, policy->related_cpus) ? policy : NULL;
+}
+
 unsigned int cpufreq_generic_get(unsigned int cpu)
 {
 	struct cpufreq_policy *policy = cpufreq_cpu_get_raw(cpu);
@@ -1007,11 +1014,9 @@ static ssize_t store(struct kobject *kobj, struct attribute *attr,
 
 	get_online_cpus();
 
-	if (cpu_online(policy->cpu)) {
-		down_write(&policy->rwsem);
-		ret = fattr->store(policy, buf, count);
-		up_write(&policy->rwsem);
-	}
+	down_write(&policy->rwsem);
+	ret = fattr->store(policy, buf, count);
+	up_write(&policy->rwsem);
 
 	put_online_cpus();
 
@@ -1502,7 +1507,6 @@ static int cpufreq_offline(unsigned int cpu)
 	 */
 	if (cpufreq_driver->exit) {
 		cpufreq_driver->exit(policy);
-		policy->freq_table = NULL;
 	}
 
 unlock:
@@ -2331,6 +2335,9 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	pr_debug("new min and max freqs are %u - %u kHz\n",
 		 policy->min, policy->max);
 
+	if (!cpu_online(policy->cpu))
+		return 0;
+
 	if (cpufreq_driver->setpolicy) {
 		policy->policy = new_policy->policy;
 		pr_debug("setting range\n");
@@ -2391,6 +2398,8 @@ int cpufreq_update_policy(unsigned int cpu)
 	struct cpufreq_policy new_policy;
 	int ret;
 
+	if (!policy)
+		policy = cpufreq_cpu_get_related(cpu);
 	if (!policy)
 		return -ENODEV;
 
