@@ -103,7 +103,6 @@ static int hotplug_cpu_in_wanted_state(unsigned int cpunumber, bool up)
 		return !cpu_online(cpunumber);
 }
 
-#if 0
 static int isolation_cpu_in_wanted_state(unsigned int cpunumber, bool up)
 {
 	if (up)
@@ -111,7 +110,6 @@ static int isolation_cpu_in_wanted_state(unsigned int cpunumber, bool up)
 	else
 		return !cpu_isolated(cpunumber);
 }
-#endif
 
 /**
  * cpuquiet_cpu_up_down - brings cpu up/down
@@ -174,7 +172,6 @@ static int cpuquiet_cpu_set_offline(unsigned int cpu)
 	return device_offline(get_cpu_device(cpu));
 }
 
-#if 0
 static int cpuquiet_cpu_isolate(unsigned int cpu)
 {
 	return sched_isolate_cpu(cpu);
@@ -184,7 +181,6 @@ static int cpuquiet_cpu_unisolate(unsigned int cpu)
 {
 	return sched_unisolate_cpu(cpu);
 }
-#endif
 
 /**
  * cpuquiet_work_func - does work of bringing CPUs up/down
@@ -328,7 +324,6 @@ void cpuquiet_switch_funcs(bool use_isolation)
 			cpu_funcs->set_online(cpu);
 	}
 
-#if 0
 	if (use_isolation) {
 		cpu_funcs->set_online = cpuquiet_cpu_unisolate;
 		cpu_funcs->set_offline = cpuquiet_cpu_isolate;
@@ -336,7 +331,6 @@ void cpuquiet_switch_funcs(bool use_isolation)
 
 		curr_avail_cpus_mask = cpu_unisolated_mask;
 	} else
-#endif
 	{
 		cpu_funcs->set_online = cpuquiet_cpu_set_online;
 		cpu_funcs->set_offline = cpuquiet_cpu_set_offline;

@@ -1090,12 +1090,8 @@ static int rqbalance_start(void)
 	if (err)
 		return err;
 
-#if 0
 	avail_cpus_mask = rqbalance_governor.use_isolation ?
 				cpu_unisolated_mask : cpu_online_mask;
-#else
-	avail_cpus_mask = cpu_online_mask;
-#endif
 
 	rqbalance_wq = alloc_workqueue("cpuquiet-rqbalance",
 			WQ_UNBOUND | WQ_FREEZABLE, 1);
