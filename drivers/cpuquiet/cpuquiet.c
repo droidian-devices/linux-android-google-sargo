@@ -174,12 +174,18 @@ static int cpuquiet_cpu_set_offline(unsigned int cpu)
 
 static int cpuquiet_cpu_isolate(unsigned int cpu)
 {
-	return sched_isolate_cpu(cpu);
+	int ret = sched_isolate_cpu(cpu);
+	if (ret < 0)
+		pr_err("Failed to isolate core %d: %d", cpu, ret);
+	return ret;
 }
 
 static int cpuquiet_cpu_unisolate(unsigned int cpu)
 {
-	return sched_unisolate_cpu(cpu);
+	int ret = sched_unisolate_cpu(cpu);
+	if (ret < 0)
+		pr_err("Failed to unisolate core %d: %d", cpu, ret);
+	return ret;
 }
 
 /**
