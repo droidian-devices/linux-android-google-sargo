@@ -4576,6 +4576,8 @@ static uint32_t wma_wow_get_wakelock_ms(int wake_reason)
 #endif
 	case WOW_REASON_ROAM_HO:
 		return WMA_ROAM_HO_WAKE_LOCK_DURATION;
+	case WOW_REASON_PATTERN_MATCH_FOUND:
+		return WMA_PATTERN_FOUND_WAKE_LOCK_DURATION;
 	}
 
 	return 0;
