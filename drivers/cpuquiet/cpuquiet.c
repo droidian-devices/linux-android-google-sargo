@@ -320,11 +320,6 @@ void cpuquiet_switch_funcs(bool use_isolation)
 		cpumask_clear(&cr_online_requests);
 		cpumask_clear(&cr_offline_requests);
 
-		/* Online all CPUs for them to be (un)isolated properly later */
-		for_each_present_cpu(cpu)
-			if (!cpu_online(cpu))
-				cpuquiet_cpu_set_online(cpu);
-
 		for_each_possible_cpu(cpu)
 			cpu_funcs->set_online(cpu);
 	}
