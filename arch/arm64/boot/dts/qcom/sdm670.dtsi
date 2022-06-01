@@ -1504,7 +1504,7 @@
 		qcom,irq-mask = <0x1000>;
 		interrupts = <GIC_SPI 449 IRQ_TYPE_EDGE_RISING>;
 		label = "mpss";
-		qcom,irq-wakeup-timer = <300>;
+		qcom,irq-wakeup-timer = <1000>;
 	};
 
 	qcom,glink-smem-native-xprt-adsp@86000000 {
