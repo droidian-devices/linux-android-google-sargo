@@ -561,6 +561,11 @@ static ssize_t autosleep_store(struct kobject *kobj,
 	    && strcmp(buf, "off") && strcmp(buf, "off\n"))
 		return -EINVAL;
 
+#ifdef CONFIG_PM_WAKELOCKS
+	if (pm_num_wakelocks() > 0)
+		return -EBUSY;
+#endif
+
 	if (state == PM_SUSPEND_MEM)
 		state = mem_sleep_current;
 
