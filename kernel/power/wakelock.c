@@ -57,24 +57,6 @@ ssize_t pm_show_wakelocks(char *buf, bool show_active)
 	return (str - buf);
 }
 
-ssize_t pm_num_wakelocks(void)
-{
-	struct rb_node *node;
-	struct wakelock *wl;
-	ssize_t ret = 0;
-
-	mutex_lock(&wakelocks_lock);
-
-	for (node = rb_first(&wakelocks_tree); node; node = rb_next(node)) {
-		wl = rb_entry(node, struct wakelock, node);
-		if (wl->ws.active)
-			++ret;
-	}
-
-	mutex_unlock(&wakelocks_lock);
-	return ret;
-}
-
 #if CONFIG_PM_WAKELOCKS_LIMIT > 0
 static unsigned int number_of_wakelocks;
 
