@@ -100,6 +100,7 @@ static inline void backlight_unregister_fb(struct backlight_device *bd)
 }
 #endif /* CONFIG_FB */
 
+#ifdef CONFIG_BACKLIGHT_UEVENTS
 static void backlight_generate_event(struct backlight_device *bd,
 				     enum backlight_update_reason reason)
 {
@@ -120,6 +121,14 @@ static void backlight_generate_event(struct backlight_device *bd,
 	kobject_uevent_env(&bd->dev.kobj, KOBJ_CHANGE, envp);
 	sysfs_notify(&bd->dev.kobj, NULL, "actual_brightness");
 }
+#else
+static void backlight_generate_event(struct backlight_device* bd,
+				     enum backlight_update_reason reason)
+{
+	(void)bd;
+	(void)reason;
+}
+#endif
 
 static ssize_t bl_power_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
