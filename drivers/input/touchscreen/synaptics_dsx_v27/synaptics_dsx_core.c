@@ -5461,7 +5461,7 @@ static void __exit synaptics_rmi4_exit(void)
 	return;
 }
 
-module_init(synaptics_rmi4_init);
+late_initcall(synaptics_rmi4_init);
 module_exit(synaptics_rmi4_exit);
 
 MODULE_AUTHOR("Synaptics, Inc.");
