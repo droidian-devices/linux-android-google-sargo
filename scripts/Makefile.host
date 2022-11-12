@@ -92,6 +92,13 @@ hostcxx_flags  = -Wp,-MD,$(depfile) $(__hostcxx_flags)
 #####
 # Compile programs on the host
 
+# Workaround for Darwin (again)
+BUILD_HOST_KERNEL := $(shell uname -s)
+HOSTLDFLAGSADD :=
+ifeq ($(BUILD_HOST_KERNEL),Darwin)
+       HOSTLDFLAGSADD := -Wl,-no_fixup_chains
+endif
+
 # Create executable from a single .c file
 # host-csingle -> Executable
 quiet_cmd_host-csingle 	= HOSTCC  $@
@@ -103,7 +110,7 @@ $(host-csingle): $(obj)/%: $(src)/%.c FORCE
 # Link an executable based on list of .o files, all plain c
 # host-cmulti -> executable
 quiet_cmd_host-cmulti	= HOSTLD  $@
-      cmd_host-cmulti	= $(HOSTCC) $(HOSTLDFLAGS) -o $@ \
+      cmd_host-cmulti	= $(HOSTCC) $(HOSTLDFLAGS) $(HOSTLDFLAGSADD) -o $@ \
 			  $(addprefix $(obj)/,$($(@F)-objs)) \
 			  $(HOST_LOADLIBES) $(HOSTLOADLIBES_$(@F))
 $(host-cmulti): FORCE
