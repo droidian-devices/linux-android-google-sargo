@@ -53,6 +53,8 @@
 #define MAX_CPU_CTX_SIZE	2048
 #define MAX_CPU_SCANDUMP_SIZE	0x10100
 
+#define CONFIG_QCOM_WDOG_IPI_ENABLE 1
+
 static struct msm_watchdog_data *wdog_data;
 
 static int cpu_idle_pc_state[NR_CPUS];
