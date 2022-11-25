@@ -5123,6 +5123,9 @@ static int synaptics_rmi4_dsi_panel_notifier_cb(struct notifier_block *self,
 				synaptics_rmi4_resume(&rmi4_data->pdev->dev);
 				mutex_unlock(&(rmi4_data->rmi4_pm_mutex));
 				rmi4_data->fb_ready = true;
+
+				pr_info("%s: Resetting hardware", __func__);
+				synaptics_rmi4_hw_reset(rmi4_data);
 			}
 		} else if (event == MSM_DRM_EARLY_EVENT_BLANK) {
 			transition = *(int *)evdata->data;
