@@ -11,7 +11,7 @@ XS-Droidian-Build-On: amd64
 Build-Depends: build-essential,
                dpkg-dev,
                findutils,
-               python2,
+               python3,
                debhelper (>= 13),
                bc,
                rsync,
