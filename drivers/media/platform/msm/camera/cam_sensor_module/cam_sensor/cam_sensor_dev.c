@@ -35,19 +35,22 @@ static long cam_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 	return rc;
 }
 
-static void cam_sensor_subdev_close(struct v4l2_subdev *sd)
+static int cam_sensor_subdev_close(struct v4l2_subdev *sd,
+	struct v4l2_subdev_fh *fh)
 {
 	struct cam_sensor_ctrl_t *s_ctrl =
 		v4l2_get_subdevdata(sd);
 
 	if (!s_ctrl) {
 		CAM_ERR(CAM_SENSOR, "s_ctrl ptr is NULL");
-		return;
+		return -EINVAL;
 	}
 
 	mutex_lock(&(s_ctrl->cam_sensor_mutex));
 	cam_sensor_shutdown(s_ctrl);
 	mutex_unlock(&(s_ctrl->cam_sensor_mutex));
+
+	return 0;
 }
 
 #ifdef CONFIG_COMPAT
@@ -102,7 +105,7 @@ static struct v4l2_subdev_ops cam_sensor_subdev_ops = {
 };
 
 static const struct v4l2_subdev_internal_ops cam_sensor_internal_ops = {
-	.release = cam_sensor_subdev_close,
+	.close = cam_sensor_subdev_close,
 };
 
 static int cam_sensor_init_subdev_params(struct cam_sensor_ctrl_t *s_ctrl)
