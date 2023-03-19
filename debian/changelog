@@ -1,24 +1,4 @@
-linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm) bookworm; urgency=medium
-
-  [ Bardia Moshiri ]
-  * Delete .circleci directory
-  * drop unused android files
-
-  [ Eugenio Paolantonio (g7) ]
-  * [packaging] Clean build artifacts
-  * [packaging] Enable creation of an empty VBMETA partition
-  * [skip ci] Replace Drone with CircleCI
-  * [skip ci] [ci] Use the checkout step provided by the droidian-buildd orb
-
-  [ Erik Inkinen ]
-  * Modify defconfig to disable 32-bit vDSOs
-  * Do not skip booting initramfs
-  * Force using tty0
-  * [packaging] Initial packaging
-  * Edit defconfig for waydroid
-  * Merge pull request #1 from droidian/feature/bullseye/erikitesting
-  * [debian] XS-Droidian additions
-  * [debian] Do not depend on python2
+linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm+git20230319025551.88465d0.bookworm) bookworm; urgency=medium
 
   [ Alfred Neumayer ]
   * Revert "binder: create node flag to request sender's security context"
@@ -41,6 +21,217 @@ linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm) bookworm; 
   * power: Add CONFIG_QCOM_PRESERVE_MEM
   * bonito: Enable CONFIG_QCOM_PRESERVE_MEM
   * drivers/char/adsprpc: Remove fastrpc_release_current_dsp_process()
+  * staging: Import WIFI drivers from lineage-18.1
+  * staging: Import fw-api from lineage-18.1
+  * qcacld-3.0: Fix FTBFS
+  * qcacld-3.0: Reduce scan wake lock time to 2 seconds
+  * qca-wifi-host-cmn: Don't allow powering down the bus
+  * Revert "qca-wifi-host-cmn: Don't allow powering down the bus"
+  * wireless: Disable WIPHY_PM_OPS
+  * qcacld-3.0: Avoid physically powering down the bus
+  * qcacld-3.0 Neutralize _noirq resume and suspend functions too
+  * qcacld-3.0: Remove dead codepaths
+  * treewide: Import CPUQuiet framework and RQBalance governor
+  * cpuquiet: Only dependency of cpuquiet-msm should be hot-plugging
+  * cpuquiet: sysfs: Set both thermal and power max_cpus to the same value
+  * cpuquiet: sysfs: Remove cpuquiet_nr_thermal_max_cpus
+  * qcacld-3.0: Increase RX_WAKELOCK_TIMEOUT to 1 second
+  * qcom: Keep 1 second wakelock during glink_smem_native_xprt irq_handler
+  * Revert "qcacld-3.0: Remove dead codepaths"
+  * Revert "qcacld-3.0 Neutralize _noirq resume and suspend functions too"
+  * Revert "qcacld-3.0: Avoid physically powering down the bus"
+  * wireless: Re-enable WIPHY suspend, with a twist
+  * security/apparmor: Allow building on macOS
+  * Revert "input: misc: drv2624: set to trigger mode during suspend"
+  * power/supply/google_charger: Fix some FTBFS with GCC
+  * qseecom: Keep fpctzappfingerprint loaded
+  * net: Import WireGuard into kernel tree
+  * media: Import v4l2loopback driver
+  * media: Integrate v4l2loopback driver
+  * fs: Import exfat driver
+  * fs: Integrate exfat driver
+  * drm: Import evdi driver
+  * drm: Integrate evdi driver
+  * fpc1020: Allow filtering of key events
+  * bpi: Remove stray .#endif
+  * btrfs: Fix FTBFS in send.c
+  * Revert "binder: search for receiving context pid in global namespace"
+  * binder: Configurable global PID lookups
+  * UBUNTUTOUCH: SAUCE: Send open/close hints to userspace
+  * glink_smem_native_xprt: Make wakeup source timespan configurable
+  * sdm670.dtsi: Set the irq wakeup timer to 300ms
+  * glink_smem_native_xprt: Fix FTBFS
+  * sdm670.dtsi: Remove irq-wakeup-timer
+  * Revert "sdm670.dtsi: Remove irq-wakeup-timer"
+  * google_charger: Disable debug logging
+  * dts: Switch thermal governors to step_wise
+  * Revert "iio: qcom-rradc: remove cache ADC_USBIN_V and ignore on early boot"
+  * google_charger: Fix FTBFS
+  * qcom-rradc: Initialize USBIN_V and BATT_ID in kthread
+  * qcom-rradc: Implement buffering and triggering
+  * fpc1020: Listen for Screen events to determine readyness
+  * sdm670: Enable fingerprint reader on boot
+  * fpc1020: Only react to GPIO IRQs when wakeup_enabled
+  * fpc1020: Disable incoming IRQs completely when requested
+  * google_charger: Disable counterproductive codepath
+  * clk-cpu-osm: Keep cpufreq_policy alive across lifespan
+  * cpufreq: Allow setting frequencies of offlined CPUs
+  * cpuquiet: Restore isolation code before
+  * cpuquiet: Use isolation in RQBalance by default
+  * cpuquiet: Print error in case (un)isolation fails
+  * cpuquiet: Online all CPUs for them to be (un)isolated properly later
+  * Revert "cpuquiet: Print error in case (un)isolation fails"
+  * Revert "cpuquiet: Online all CPUs for them to be (un)isolated properly later"
+  * Revert "cpuquiet: Use isolation in RQBalance by default"
+  * scripts: Use GNU utils on Darwin too
+  * qcacld-3.0: Add wakelock timeout for PATTERN_MATCH_FOUND
+  * sdm670.dtsi: Increase wakelock timeout to 1s
+  * qcacld-3.0: Increase wakelock duration for PATTERN_FOUND
+  * kernel/power: Check number of active wakelocks before suspend
+  * Revert "kernel/power: Check number of active wakelocks before suspend"
+  * Revert "kgsl: Increase priority of RT thread"
+  * Revert "sched/core: Use SCHED_RR in place of SCHED_FIFO for all users."
+  * Revert "fpc1020: Disable incoming IRQs completely when requested"
+  * Revert "fpc1020: Only react to GPIO IRQs when wakeup_enabled"
+  * Revert "fpc1020: Listen for Screen events to determine readyness"
+  * sched: tune: Support access through dfl_cftypes interface
+  * drivers: backlight: Configurable uevents
+  * drivers: input: Enforce input order
+  * scripts: Workaround for macOS compile flags changes
+  * drivers: media: msm: Use release callback
+  * drivers: qcom: watchdog: Enable CONFIG_QCOM_WDOG_IPI_ENABLE
+  * drivers: synaptics_dsx_v27: Always reset HW when turning screen on
+  * drivers: android: Demote gbinder workaround message to debug level
+  * Revert "drivers: media: msm: Use release callback"
+  * Revert "media: v4l2-subdev: add release() internal op"
+  * media: Revert camera revert
+
+  [ Bardia Moshiri ]
+  * Delete .circleci directory
+  * drop unused android files
+  * add droidian.lvm.prefer
+  * bonito: Enable CPUQuiet & RQBalance
+  * bonito: Enable config switches for WireGuard
+  * bonito: Enable v4l2loopback driver
+  * enable evdi udl DRM and exfat
+  * enable btrfs
+  * disable dev/alarmm and enable additional IPv6/NAT configs
+  * bonito: Enable a few useful IIO features
+  * disable CPUQuiet
+  * bonito: Enable EXT4 file-based encryption
+  * bonito: Set CONFIG_BACKLIGHT_UEVENTS=n
+  * Reenable SUSPEND_TIME
+  * disable sdcardsfs enaable overlayfs and binfmt_misc
+
+  [ Hans Verkuil ]
+  * cec: when canceling a message, don't overwrite old status info
+  * cec: CEC_MSG_GIVE_FEATURES should abort for CEC version < 2
+  * cec: update log_addr[] before finishing configuration
+  * cec: initiator should be the same as the destination for, poll
+  * media: v4l2-ioctl.c: don't copy back the result for -ENOTTY
+  * media: v4l2-compat-ioctl32.c: add missing VIDIOC_PREPARE_BUF
+  * media: v4l2-compat-ioctl32.c: fix the indentation
+  * media: v4l2-compat-ioctl32.c: move 'helper' functions to __get/put_v4l2_format32
+  * media: v4l2-compat-ioctl32.c: avoid sizeof(type)
+  * media: v4l2-compat-ioctl32.c: copy m.userptr in put_v4l2_plane32
+  * media: v4l2-compat-ioctl32.c: fix ctrl_is_pointer
+  * media: v4l2-compat-ioctl32.c: make ctrl_is_pointer work for subdevs
+  * media: v4l2-compat-ioctl32.c: copy clip list in put_v4l2_window32
+  * media: v4l2-compat-ioctl32.c: drop pr_info for unknown buffer type
+  * media: v4l2-compat-ioctl32.c: don't copy back the result for certain errors
+  * media: vivid: fix incorrect capabilities for radio
+  * media: videobuf2-core: don't call memop 'finish' when queueing
+  * media: v4l2-subdev: add release() internal op
+
+  [ Harshitha Sai Neelati ]
+  * msm: kgsl: Don't wait for room in context queue when context is invalidated
+
+  [ Sultan Alsawaf ]
+  * sched/core: Use SCHED_RR in place of SCHED_FIFO for all users.
+  * msm: kgsl: Increase worker thread priority
+  * msm: kgsl: Wake GPU upon receiving an ioctl rather than upon touch input
+  * msm: kgsl: Remove POPP
+
+  [ Dmitry Torokhov ]
+  * Input: gtco - fix potential out-of-bound access
+  * Input: ims-psu - check if CDC union descriptor is sane
+  * Input: i8042 - add TUXEDO BU1406 (N24_25BU) to the nomux list
+  * Input: tca8418_keypad - remove double read of key event register
+  * Input: ar1021_i2c - fix too long name in driver's device table
+  * Input: elan_i2c - check if device is there before really probing
+  * Input: drv260x - fix initializing overdrive voltage
+  * Input: leds - fix out of bound access
+  * Input: psmouse - fix Synaptics detection when protocol is disabled
+  * HID: i2c-hid: check if device is there before really probing
+  * CHROMIUM: sched: tune: allow nested schedtune groups
+
+  [ Alex Naidis ]
+  * kgsl: Increase priority of RT thread
+
+  [ Angelo G. Del Regno ]
+  * cpumask: Add cpumask for not-isolated CPUs
+  * cpumask: Simplify num_online_uniso_cpus macro
+  * sched/core: Initialize CPU isolated mask at core init time
+
+  [ Ricardo Mendoza ]
+  * binder: search for receiving context pid in global namespace
+
+  [ AleX Pelosi ]
+  * google_charger: fix switching tiers condition
+  * google_charger: compensate for irdrop in charge
+  * google_charger: parallel charging in last tier
+  * google_charger: handle ESR pulses and temperature
+  * google_charger: no debounce on taper enter
+  * google_charger: corner cases for vbatt~=vtier
+  * max1720x_battery: interrupt storm on GG notify
+  * max1720x_battery: FG delay in release ALRT1
+  * google_charger: track battery voltage on discharge
+  * max1720x_battery: limit number of history entries
+  * p9221_charger: set ICL after DC_IN
+  * ARM: dts: b1c1: fix default ICL for DC-IN
+  * google_charger: fix race on boot for wireless pads
+  * p9221_charger: lower ICL, add a filter on OVP
+  * max1720x_battery: return full gas gauge history
+  * arm46/dts: b1c1: cap fv_uv in FAST charge
+  * google_charger: route *_PROP_BATT_CE_CTRL to batt_psy
+  * power_supply: add POWER_SUPPLY_PROP_BATT_CE_CTRL property
+
+  [ Ted Lin ]
+  * qpnp-fg-gen3: add cycle_counts_bins device driver attribute
+  * qpnp-fg-gen3: add delay for get batt_id.
+  * power: smb-lib: disable the pre-bias resistor by usb plugin.
+  * max1720x: add delay for get batt_id.
+  * google_battery: sync battery defend feature
+  * google_charger: bd state on disconnect when not triggered
+
+  [ Stephane Lee ]
+  * google_charger: Allow USB 'online' to remain 1 when charge levels are changed
+  * google_charger: Remove ICL 100mA when charge levels are changed
+
+  [ Jenny Ho ]
+  * google_charger: reset charger in gauge not align situation
+
+  [ Nicolas Iooss ]
+  * apparmor: use SHASH_DESC_ON_STACK
+
+  [ Vincent Palomares ]
+  * soc:qcom:icnss Async suspend/resume callbacks.
+
+  [ Eugenio Paolantonio (g7) ]
+  * [packaging] Clean build artifacts
+  * [packaging] Enable creation of an empty VBMETA partition
+  * [skip ci] Replace Drone with CircleCI
+  * [skip ci] [ci] Use the checkout step provided by the droidian-buildd orb
+
+  [ Erik Inkinen ]
+  * Modify defconfig to disable 32-bit vDSOs
+  * Do not skip booting initramfs
+  * Force using tty0
+  * [packaging] Initial packaging
+  * Edit defconfig for waydroid
+  * Merge pull request #1 from droidian/feature/bullseye/erikitesting
+  * [debian] XS-Droidian additions
+  * [debian] Do not depend on python2
 
   [ Perseus X ]
   * (halium) binder: do not use a separate queue for async oneway transactions
@@ -8478,24 +8669,6 @@ linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm) bookworm; 
   * drm/msm/sde: enable secure-ui-misr feature for sdm670/710 target
   * drm/msm/sde: Fix deadlock due to input handler
 
-  [ AleX Pelosi ]
-  * google_charger: fix switching tiers condition
-  * google_charger: compensate for irdrop in charge
-  * google_charger: parallel charging in last tier
-  * google_charger: handle ESR pulses and temperature
-  * google_charger: no debounce on taper enter
-  * google_charger: corner cases for vbatt~=vtier
-  * max1720x_battery: interrupt storm on GG notify
-  * max1720x_battery: FG delay in release ALRT1
-  * google_charger: track battery voltage on discharge
-  * max1720x_battery: limit number of history entries
-  * p9221_charger: set ICL after DC_IN
-  * ARM: dts: b1c1: fix default ICL for DC-IN
-  * google_charger: fix race on boot for wireless pads
-  * p9221_charger: lower ICL, add a filter on OVP
-  * max1720x_battery: return full gas gauge history
-  * arm46/dts: b1c1: cap fv_uv in FAST charge
-
   [ Siva Kumar Akkireddi ]
   * thermal: tsens: Add MTC support for SDM439
   * msm: mhi_dev: Fix client callback call sequence to update channel state
@@ -12525,18 +12698,6 @@ linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm) bookworm; 
   * EDAC, altera: Fix peripheral warnings for Cyclone5
   * EDAC, altera: Fix ARM64 build warning
 
-  [ Dmitry Torokhov ]
-  * Input: gtco - fix potential out-of-bound access
-  * Input: ims-psu - check if CDC union descriptor is sane
-  * Input: i8042 - add TUXEDO BU1406 (N24_25BU) to the nomux list
-  * Input: tca8418_keypad - remove double read of key event register
-  * Input: ar1021_i2c - fix too long name in driver's device table
-  * Input: elan_i2c - check if device is there before really probing
-  * Input: drv260x - fix initializing overdrive voltage
-  * Input: leds - fix out of bound access
-  * Input: psmouse - fix Synaptics detection when protocol is disabled
-  * HID: i2c-hid: check if device is there before really probing
-
   [ Jonathan Neuschäfer ]
   * powerpc/embedded6xx/hlwd-pic: Prevent interrupts from being handled by Starlet
 
@@ -12852,25 +13013,6 @@ linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm) bookworm; 
 
   [ David Sterba ]
   * btrfs: add barriers to btrfs_sync_log before log_commit_wait wakeups
-
-  [ Hans Verkuil ]
-  * cec: when canceling a message, don't overwrite old status info
-  * cec: CEC_MSG_GIVE_FEATURES should abort for CEC version < 2
-  * cec: update log_addr[] before finishing configuration
-  * cec: initiator should be the same as the destination for, poll
-  * media: v4l2-ioctl.c: don't copy back the result for -ENOTTY
-  * media: v4l2-compat-ioctl32.c: add missing VIDIOC_PREPARE_BUF
-  * media: v4l2-compat-ioctl32.c: fix the indentation
-  * media: v4l2-compat-ioctl32.c: move 'helper' functions to __get/put_v4l2_format32
-  * media: v4l2-compat-ioctl32.c: avoid sizeof(type)
-  * media: v4l2-compat-ioctl32.c: copy m.userptr in put_v4l2_plane32
-  * media: v4l2-compat-ioctl32.c: fix ctrl_is_pointer
-  * media: v4l2-compat-ioctl32.c: make ctrl_is_pointer work for subdevs
-  * media: v4l2-compat-ioctl32.c: copy clip list in put_v4l2_window32
-  * media: v4l2-compat-ioctl32.c: drop pr_info for unknown buffer type
-  * media: v4l2-compat-ioctl32.c: don't copy back the result for certain errors
-  * media: vivid: fix incorrect capabilities for radio
-  * media: videobuf2-core: don't call memop 'finish' when queueing
 
   [ Ezequiel Garcia ]
   * media: tw686x: Fix incorrect vb2_mem_ops GFP flags
@@ -14924,12 +15066,6 @@ linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm) bookworm; 
   [ Ramprasad Katkam ]
   * audio-lnx: Correct mutex usage during error handling
   * rtac: Add mutex protection for rtac cal apis
-
-  [ Ted Lin ]
-  * qpnp-fg-gen3: add cycle_counts_bins device driver attribute
-  * qpnp-fg-gen3: add delay for get batt_id.
-  * power: smb-lib: disable the pre-bias resistor by usb plugin.
-  * max1720x: add delay for get batt_id.
 
   [ Andrew Rossignol ]
   * ARM: dts: b1c1: Set devboard spi8 sleep pinctrl to sleep
@@ -27984,5 +28120,5 @@ linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm) bookworm; 
   [ Git User ]
   * Initial empty repository
 
- -- Bardia Moshiri <fakeshell@bardia.tech>  Sat, 18 Mar 2023 21:41:32 -0400
+ -- Alfred Neumayer <dev.beidl@gmail.com>  Sat, 18 Mar 2023 22:55:51 -0400
 

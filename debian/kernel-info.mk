@@ -11,7 +11,7 @@ VARIANT = android
 KERNEL_BASE_VERSION = 4.9-124
 
 # The kernel cmdline to use
-KERNEL_BOOTIMAGE_CMDLINE = console=ttyMSM0,115200n8 androidboot.console=ttyMSM0 printk.devkmsg=on msm_rtb.filter=0x237 ehci-hcd.park=3 service_locator.enable=1 firmware_class.path=/vendor/firmware datapart=/dev/mmcblk0p72 cgroup.memory=nokmem lpm_levels.sleep_disabled=1 apparmor=1 security=apparmor
+KERNEL_BOOTIMAGE_CMDLINE = console=ttyMSM0,115200n8 androidboot.console=ttyMSM0 printk.devkmsg=on msm_rtb.filter=0x237 ehci-hcd.park=3 service_locator.enable=1 firmware_class.path=/vendor/firmware datapart=/dev/mmcblk0p72 cgroup.memory=nokmem lpm_levels.sleep_disabled=1 apparmor=1 security=apparmor droidian.lvm.prefer
 
 # Slug for the device vendor. This is going to be used in the KERNELRELASE
 # and package names.
@@ -98,10 +98,18 @@ FLASH_IS_LEGACY_DEVICE = 0
 # FLASH_INFO_CPU will be checked instead.
 FLASH_INFO_MANUFACTURER = Google
 
+# Device manufacturer. This must match the `ro.product.vendor.manufacturer`
+# Android property. If you don't want to specify this, leave it undefined,
+# FLASH_INFO_CPU will be checked instead.
+FLASH_INFO_MANUFACTURER = Google
+
+# Space-separated list of supported device ids as reported by fastboot
+FLASH_INFO_DEVICE_IDS = bonito sargo
+
 # Device model. This must match the `ro.product.vendor.model`
 # Android property. If you don't want to specify this, leave it undefined,
 # FLASH_INFO_CPU will be checked instead.
-FLASH_INFO_MODEL = Pixel 3a
+# FLASH_INFO_MODEL = Pixel 3a
 
 # Device CPU. This will be grepped against /proc/cpuinfo to check if
 # we're running on the specific device. Note this is a last-resort
