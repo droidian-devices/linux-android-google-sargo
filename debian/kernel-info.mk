@@ -84,6 +84,10 @@ DEVICE_VBMETA_IS_SAMSUNG = 0
 # Whether to enable kernel upgrades on package upgrades. Use 0 (no) or 1.
 FLASH_ENABLED = 1
 
+# If your device is treble-ized, but aonly, you should set the following to
+# 1 (yes).
+FLASH_IS_AONLY = 1
+
 # `flash-bootimage` defaults are enough for most recent devices, but legacy
 # devices won't work out of the box.
 # If you set the following to 1, this package will set `flash-bootimage`'s
@@ -96,12 +100,7 @@ FLASH_IS_LEGACY_DEVICE = 0
 # Device manufacturer. This must match the `ro.product.vendor.manufacturer`
 # Android property. If you don't want to specify this, leave it undefined,
 # FLASH_INFO_CPU will be checked instead.
-FLASH_INFO_MANUFACTURER = Google
-
-# Device manufacturer. This must match the `ro.product.vendor.manufacturer`
-# Android property. If you don't want to specify this, leave it undefined,
-# FLASH_INFO_CPU will be checked instead.
-FLASH_INFO_MANUFACTURER = Google
+FLASH_INFO_MANUFACTURER =
 
 # Space-separated list of supported device ids as reported by fastboot
 FLASH_INFO_DEVICE_IDS = bonito sargo
@@ -109,7 +108,7 @@ FLASH_INFO_DEVICE_IDS = bonito sargo
 # Device model. This must match the `ro.product.vendor.model`
 # Android property. If you don't want to specify this, leave it undefined,
 # FLASH_INFO_CPU will be checked instead.
-# FLASH_INFO_MODEL = Pixel 3a
+FLASH_INFO_MODEL =
 
 # Device CPU. This will be grepped against /proc/cpuinfo to check if
 # we're running on the specific device. Note this is a last-resort

@@ -1,0 +1,3 @@
+# Aliases extracted from modules themselves.
+alias ip6t_bpf xt_bpf
+alias ipt_bpf xt_bpf

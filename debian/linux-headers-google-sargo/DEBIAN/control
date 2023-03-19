@@ -1,0 +1,11 @@
+Package: linux-headers-google-sargo
+Source: linux-android-google-sargo
+Version: 0.0.0+git20230319014132.ef051e6.bookworm+git20230319025551.88465d0.bookworm
+Architecture: arm64
+Maintainer: Bardia Moshiri <fakeshell@bardia.tech>
+Installed-Size: 445
+Depends: linux-headers-4.9-124-google-sargo (= 0.0.0+git20230319014132.ef051e6.bookworm+git20230319025551.88465d0.bookworm)
+Section: kernel
+Priority: optional
+Description: Linux kernel for Google Pixel 3a - Headers (latest)
+ This package depends to the latest kernel headers available for the Google Pixel 3a.
