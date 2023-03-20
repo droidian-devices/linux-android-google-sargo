@@ -1,4 +1,24 @@
-linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm+git20230319025551.88465d0.bookworm) bookworm; urgency=medium
+linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm+git20230319025551.88465d0.bookworm+git20230319045422.5e00e85.bookworm) bookworm; urgency=medium
+
+  [ Bardia Moshiri ]
+  * Delete .circleci directory
+  * drop unused android files
+  * add droidian.lvm.prefer
+  * bonito: Enable CPUQuiet & RQBalance
+  * bonito: Enable config switches for WireGuard
+  * bonito: Enable v4l2loopback driver
+  * enable evdi udl DRM and exfat
+  * enable btrfs
+  * disable dev/alarmm and enable additional IPv6/NAT configs
+  * bonito: Enable a few useful IIO features
+  * disable CPUQuiet
+  * bonito: Enable EXT4 file-based encryption
+  * bonito: Set CONFIG_BACKLIGHT_UEVENTS=n
+  * Reenable SUSPEND_TIME
+  * disable sdcardsfs enaable overlayfs and binfmt_misc
+  * add codenames to succesfully flash the image on installation
+  * check against  FLASH_INFO_CPU
+  * check against  FLASH_INFO_CPU
 
   [ Alfred Neumayer ]
   * Revert "binder: create node flag to request sender's security context"
@@ -105,23 +125,6 @@ linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm+git20230319
   * Revert "drivers: media: msm: Use release callback"
   * Revert "media: v4l2-subdev: add release() internal op"
   * media: Revert camera revert
-
-  [ Bardia Moshiri ]
-  * Delete .circleci directory
-  * drop unused android files
-  * add droidian.lvm.prefer
-  * bonito: Enable CPUQuiet & RQBalance
-  * bonito: Enable config switches for WireGuard
-  * bonito: Enable v4l2loopback driver
-  * enable evdi udl DRM and exfat
-  * enable btrfs
-  * disable dev/alarmm and enable additional IPv6/NAT configs
-  * bonito: Enable a few useful IIO features
-  * disable CPUQuiet
-  * bonito: Enable EXT4 file-based encryption
-  * bonito: Set CONFIG_BACKLIGHT_UEVENTS=n
-  * Reenable SUSPEND_TIME
-  * disable sdcardsfs enaable overlayfs and binfmt_misc
 
   [ Hans Verkuil ]
   * cec: when canceling a message, don't overwrite old status info
@@ -28120,5 +28123,5 @@ linux-android-google-sargo (0.0.0+git20230319014132.ef051e6.bookworm+git20230319
   [ Git User ]
   * Initial empty repository
 
- -- Alfred Neumayer <dev.beidl@gmail.com>  Sat, 18 Mar 2023 22:55:51 -0400
+ -- Bardia Moshiri <fakeshell@bardia.tech>  Sun, 19 Mar 2023 00:54:22 -0400
 
