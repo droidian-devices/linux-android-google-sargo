@@ -12,17 +12,20 @@
 
 #define V4L2LOOPBACK_VERSION_MAJOR 0
 #define V4L2LOOPBACK_VERSION_MINOR 12
-#define V4L2LOOPBACK_VERSION_BUGFIX 5
+#define V4L2LOOPBACK_VERSION_BUGFIX 7
 
 /* /dev/v4l2loopback interface */
 
 struct v4l2_loopback_config {
-	/** 
+	/**
          * the device-number (/dev/video<nr>)
          * V4L2LOOPBACK_CTL_ADD:
          * setting this to a value<0, will allocate an available one
          * if nr>=0 and the device already exists, the ioctl will EEXIST
          * if output_nr and capture_nr are the same, only a single device will be created
+	 * NOTE: currently split-devices (where output_nr and capture_nr differ)
+	 *   are not implemented yet.
+	 *   until then, requesting different device-IDs will result in EINVAL.
          *
          * V4L2LOOPBACK_CTL_QUERY:
          * either both output_nr and capture_nr must refer to the same loopback,
@@ -30,7 +33,7 @@ struct v4l2_loopback_config {
          *
          */
 	int output_nr;
-	int capture_nr;
+	int unused; /*capture_nr;*/
 
 	/**
          * a nice name for your device
@@ -39,19 +42,13 @@ struct v4l2_loopback_config {
 	char card_label[32];
 
 	/**
-         * maximum allowed frame size
+         * allowed frame size
          * if too low, default values are used
          */
-	int max_width;
-	int max_height;
-
-	/**
-         * whether to announce OUTPUT/CAPTURE capabilities exclusively
-         * for this device or not
-         * (!exclusive_caps)
-         * FIXXME: this ought to be removed (if superseded by output_nr vs capture_nr)
-         */
-	int announce_all_caps;
+	unsigned int min_width;
+	unsigned int max_width;
+	unsigned int min_height;
+	unsigned int max_height;
 
 	/**
          * number of buffers to allocate for the queue
@@ -69,22 +66,15 @@ struct v4l2_loopback_config {
          * set the debugging level for this device
          */
 	int debug;
-};
 
-/* For reads of v4l2 buffers, allow userspace to get hints from
- * the kernel, to produce buffers on demand or to spawn permission dialogs.
- */
-enum v4l2_loopback_hint_type {
-	HINT_UNKNOWN = 0,
-	HINT_OPEN,
-	HINT_CLOSE
-};
-
-struct v4l2_loopback_hint {
-	enum v4l2_loopback_hint_type type;
-	uid_t uid;
-	pid_t pid;
-	int node;
+	/**
+         * whether to announce OUTPUT/CAPTURE capabilities exclusively
+         * for this device or not
+         * (!exclusive_caps)
+	 * NOTE: this is going to be removed once separate output/capture
+	 *       devices are implemented
+         */
+	int announce_all_caps;
 };
 
 /* a pointer to a (struct v4l2_loopback_config) that has all values you wish to impose on the
